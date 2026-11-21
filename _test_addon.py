@@ -7,6 +7,7 @@
 import importlib
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import time
@@ -111,6 +112,8 @@ LOGS = []
 xbmc.log = lambda message, *args, **kwargs: LOGS.append(message)
 xbmc.Keyboard = Keyboard
 xbmc.executebuiltin = lambda command, *args, **kwargs: BUILTINS.append(command)
+xbmc.sleep = lambda milliseconds: None
+xbmc.getSkinDir = lambda: 'skin.test'
 xbmc.getCondVisibility = (lambda condition: 'inputstream.adaptive' in condition)
 
 xbmcgui = types.ModuleType('xbmcgui')
@@ -184,6 +187,7 @@ xbmcvfs = types.ModuleType('xbmcvfs')
 
 def translatePath(path):
     return path.replace(
+        'special://database', os.path.join(workdir, 'database')).replace(
         'special://profile/addon_data/plugin.video.ghoststream/',
         PROFILE_ROOT).replace(
         'special://profile/addon_data/plugin.video.cartonitalia',
@@ -201,7 +205,8 @@ sys.modules['xbmcvfs'] = xbmcvfs
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
-from resources.lib import archive_api, playlist, playlist_store, tv  # noqa: E402
+from resources.lib import (archive_api, playlist, playlist_store, tv,  # noqa: E402
+                           views)
 
 
 def run(param=''):
@@ -841,5 +846,37 @@ check('Mio Canale' in [entry['name'] for entry in tv.channels('')],
 os.remove(sources_path)
 check('Mio Canale' not in [entry['name'] for entry in tv.channels('', force=True)],
       'senza sources.json il canale singolo sparisce')
+
+print('18) vista delle cartelle ricordata')
+dbfolder = os.path.join(workdir, 'database')
+if not os.path.isdir(dbfolder):
+    os.makedirs(dbfolder)
+dbpath = os.path.join(dbfolder, 'ViewModes6.db')
+connection = sqlite3.connect(dbpath)
+connection.execute('create table view (idView integer primary key, window integer, '
+                   'path text, viewMode integer, sortMethod integer, '
+                   'sortOrder integer, sortAttributes integer, skin text)')
+radice = 'plugin://plugin.video.ghoststream/'
+connection.execute('insert into view values (1, 10025, ?, 66036, 0, 1, 0, ?)',
+                   (radice, 'skin.test'))
+connection.commit()
+connection.close()
+check(views.database().endswith('ViewModes6.db'), 'database delle viste trovato')
+check(views.stored_view(radice) == 66036, 'vista scelta letta dal database di Kodi')
+BUILTINS[:] = []
+check(views.apply(radice) == 66036 and
+      'Container.SetViewMode(66036)' in BUILTINS,
+      'vista riapplicata alla cartella')
+check(playlist_store.read_data('views.json').get(radice) == 66036,
+      'vista copiata nella cartella dati dell addon')
+os.remove(dbpath)
+BUILTINS[:] = []
+check(views.apply(radice) == 66036 and
+      'Container.SetViewMode(66036)' in BUILTINS,
+      'senza il database di Kodi vale la copia locale')
+check(views.stored_view(radice) == 0, 'database assente: nessuna vista da leggere')
+run('')
+check('Container.SetViewMode(66036)' in BUILTINS,
+      'aprendo il menu la vista scelta viene applicata davvero')
 
 print('ESITO OK')

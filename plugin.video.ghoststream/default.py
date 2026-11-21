@@ -25,7 +25,7 @@ import xbmcaddon
 import xbmcvfs
 
 from resources.lib import (archive_api, local, naming, playlist,
-                           playlist_store, tv, youtube)
+                           playlist_store, tv, views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -189,6 +189,10 @@ def end(content=None):
     log('elenco completato: %d voci' % ITEM_COUNT[0])
     ITEM_COUNT[0] = 0
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+    # La vista scelta (lista, icone...) resta anche dopo un aggiornamento.
+    view = views.apply(sys.argv[0])
+    if view:
+        log('vista riapplicata: %d' % view)
 
 
 def redirect(target):
