@@ -21,6 +21,7 @@ Solo libreria standard: nessuna dipendenza da installare.
 import hashlib
 import json
 import os
+import queue
 import re
 import subprocess
 import sys
@@ -35,16 +36,12 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 ADDON_DIR = 'plugin.video.ghoststream'
 REPOSITORY_DIR = 'repository.ghoststream'
 BASE_FILE = os.path.join(ROOT, 'repo_base.txt')
-PROFILE_FILE = os.path.join(ROOT, 'gui_profile.txt')
 SOURCES_FILE = 'sources.json'
 USER_AGENT = 'Ghost-Stream gestione/1.0'
 DEFAULT_PROFILE = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')),
                                'Kodi', 'userdata', 'addon_data', ADDON_DIR)
 
 
-# --------------------------------------------------------------------------
-# Utilita'
-# --------------------------------------------------------------------------
 def read_text(path, default=''):
     try:
         with open(path, 'r', encoding='utf-8') as handle:
@@ -61,17 +58,21 @@ def write_text(path, text):
         handle.write(text)
 
 
-def addon_version():
+def read_json(path):
+    """(dati, errore): dati vuoti se il file manca o non e' un oggetto."""
+    if not os.path.isfile(path):
+        return {}, None
     try:
-        tree = ET.parse(os.path.join(ROOT, ADDON_DIR, 'addon.xml'))
-    except (OSError, ET.ParseError):
-        return '?'
-    return tree.getroot().get('version') or '?'
+        with open(path, 'r', encoding='utf-8') as handle:
+            data = json.load(handle)
+    except (OSError, ValueError) as exc:
+        return {}, str(exc)
+    return (data, None) if isinstance(data, dict) else ({}, None)
 
 
-def repository_version():
+def version_of(folder):
     try:
-        tree = ET.parse(os.path.join(ROOT, REPOSITORY_DIR, 'addon.xml'))
+        tree = ET.parse(os.path.join(ROOT, folder, 'addon.xml'))
     except (OSError, ET.ParseError):
         return '?'
     return tree.getroot().get('version') or '?'
@@ -83,21 +84,19 @@ def fetch(url, timeout=25):
         return response.read()
 
 
-# --------------------------------------------------------------------------
-# Finestra
-# --------------------------------------------------------------------------
 class App(object):
     def __init__(self, root):
         self.root = root
         self.busy = False
-        self._last_output = ''
+        self.finished = False
+        self.queue = queue.Queue()
         root.title('Ghost-Stream - repository e sorgenti')
         root.minsize(760, 620)
 
         self.base = tk.StringVar(value=read_text(BASE_FILE).strip())
         self.message = tk.StringVar(
-            value='Aggiornamento repository Kodi (%s).' % addon_version())
-        self.profile = tk.StringVar(value=self._profile_path())
+            value='Aggiornamento repository Kodi (%s).' % version_of(ADDON_DIR))
+        self.profile = tk.StringVar(value=DEFAULT_PROFILE)
         self.tv_url = tk.StringVar()
         self.tv_extra = tk.StringVar()
         self.epg_url = tk.StringVar()
@@ -113,10 +112,11 @@ class App(object):
 
         self.load_sources()
         self._append('Ghost-Stream: addon %s, repository %s.'
-                     % (addon_version(), repository_version()))
+                     % (version_of(ADDON_DIR), version_of(REPOSITORY_DIR)))
         if not self.base.get():
             self._append('Manca l indirizzo base: scrivilo e premi '
                          '"Salva indirizzo" prima di aggiornare il repository.')
+        self.root.after(120, self._drain)
 
     # ---------------------------------------------------------------- layout
     def _repo_tab(self, notebook):
@@ -125,11 +125,10 @@ class App(object):
 
         ttk.Label(tab, text='Indirizzo base (cartella repo/ pubblicata):'
                   ).grid(row=0, column=0, sticky='w')
-        entry = ttk.Entry(tab, textvariable=self.base)
-        entry.grid(row=1, column=0, sticky='we', pady=(2, 6))
+        ttk.Entry(tab, textvariable=self.base).grid(
+            row=1, column=0, sticky='we', pady=(2, 6))
         ttk.Button(tab, text='Salva indirizzo',
                    command=self.save_base).grid(row=2, column=0, sticky='w')
-
         ttk.Separator(tab, orient='horizontal').grid(
             row=3, column=0, sticky='we', pady=10)
 
@@ -172,11 +171,11 @@ class App(object):
         ttk.Entry(tab, textvariable=self.tv_url).grid(
             row=2, column=0, columnspan=3, sticky='we')
 
-        ttk.Label(tab, text='Liste M3U aggiuntive (una per riga):').grid(
+        ttk.Label(tab, text='Liste M3U aggiuntive:').grid(
             row=3, column=0, columnspan=3, sticky='w', pady=(8, 0))
         self.tv_list = self._listbox(tab, 4, 4)
         ttk.Entry(tab, textvariable=self.tv_extra).grid(
-            row=5, column=0, sticky='we', pady=(4, 0))
+            row=5, column=0, columnspan=2, sticky='we', pady=(4, 0))
         self._add_remove(tab, 5, self.tv_extra, self.tv_list)
 
         ttk.Label(tab, text='Guida TV principale (epg_url), vuoto = guide '
@@ -185,11 +184,11 @@ class App(object):
         ttk.Entry(tab, textvariable=self.epg_url).grid(
             row=7, column=0, columnspan=3, sticky='we')
 
-        ttk.Label(tab, text='Guide XMLTV aggiuntive (una per riga):').grid(
+        ttk.Label(tab, text='Guide XMLTV aggiuntive:').grid(
             row=8, column=0, columnspan=3, sticky='w', pady=(8, 0))
         self.epg_list = self._listbox(tab, 9, 3)
         ttk.Entry(tab, textvariable=self.epg_extra).grid(
-            row=10, column=0, sticky='we', pady=(4, 0))
+            row=10, column=0, columnspan=2, sticky='we', pady=(4, 0))
         self._add_remove(tab, 10, self.epg_extra, self.epg_list)
 
         ttk.Label(tab, text='Canali singoli:').grid(
@@ -215,8 +214,7 @@ class App(object):
         ttk.Button(tab, text='Salva sorgenti', command=self.save_sources).grid(
             row=15, column=0, sticky='w', pady=(12, 0))
         ttk.Label(tab, text=('Le sorgenti si salvano in sources.json: l addon '
-                             'le usa al posto dei valori vuoti, senza toccare '
-                             'le impostazioni di Kodi.'),
+                             'le usa accanto alle impostazioni di Kodi.'),
                   wraplength=700, foreground='#555').grid(
             row=16, column=0, columnspan=3, sticky='w', pady=(8, 0))
 
@@ -227,7 +225,7 @@ class App(object):
 
     def _add_remove(self, parent, row, variable, box):
         frame = ttk.Frame(parent)
-        frame.grid(row=row, column=1, columnspan=2, sticky='e', pady=(4, 0))
+        frame.grid(row=row, column=2, sticky='e', pady=(4, 0))
 
         def add():
             value = variable.get().strip()
@@ -255,15 +253,27 @@ class App(object):
 
     # ---------------------------------------------------------------- output
     def _append(self, text):
-        def inner():
+        """Scrive dalla coda: i comandi lunghi girano in un altro thread."""
+        self.queue.put(text.rstrip())
+
+    def _drain(self):
+        """Svuota la coda e chiude il comando in corso, nel thread di Tk."""
+        while True:
+            try:
+                text = self.queue.get_nowait()
+            except queue.Empty:
+                break
             self.out.configure(state='normal')
-            self.out.insert('end', text.rstrip() + '\n')
+            self.out.insert('end', text + '\n')
             self.out.see('end')
             self.out.configure(state='disabled')
-        self.root.after(0, inner)
+        if self.finished:
+            self.finished = False
+            self.busy = False
+            self.root.configure(cursor='')
+        self.root.after(120, self._drain)
 
     def _work(self, func):
-        """Comandi lunghi fuori dal thread dell'interfaccia."""
         if self.busy:
             messagebox.showinfo('Un momento', 'C e gia un comando in corso.')
             return
@@ -276,75 +286,72 @@ class App(object):
             except Exception as exc:
                 self._append('errore: %s' % exc)
             finally:
-                def done():
-                    self.busy = False
-                    self.root.configure(cursor='')
-                self.root.after(0, done)
+                self.finished = True
 
         threading.Thread(target=runner, daemon=True).start()
 
     def _run(self, args):
-        """Esegue un comando, ne mostra l'uscita e restituisce il codice."""
+        """(codice, uscita) di un comando, con l'uscita gia' nel riquadro."""
         self._append('> ' + ' '.join(args))
         flags = getattr(subprocess, 'CREATE_NO_WINDOW', 0) if os.name == 'nt' else 0
         proc = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
                               encoding='utf-8', errors='replace',
                               creationflags=flags)
         output = ((proc.stdout or '') + (proc.stderr or '')).strip()
-        self._last_output = output
         if output:
             self._append(output)
         self._append('uscita: %d' % proc.returncode)
-        return proc.returncode
+        return proc.returncode, output
 
     # ------------------------------------------------------------ repository
-    def save_base(self):
+    def _base(self):
+        """Indirizzo in repo_base.txt, salvato; None se non e' valido."""
         base = self.base.get().strip().rstrip('/')
         if not base.startswith('http'):
             messagebox.showerror('Indirizzo non valido',
-                                 'Serve un indirizzo che comincia con http.')
-            return
-        write_text(BASE_FILE, base + '\n')
+                                 'Scrivi l indirizzo della cartella repo/ '
+                                 '(comincia con http).')
+            return None
         self.base.set(base)
-        self._append('indirizzo base salvato: %s' % base)
+        write_text(BASE_FILE, base + '\n')
+        return base
+
+    def save_base(self):
+        base = self._base()
+        if base:
+            self._append('indirizzo base salvato: %s' % base)
 
     def build_repo(self):
-        base = self.base.get().strip().rstrip('/')
-        if not base.startswith('http'):
-            messagebox.showerror('Indirizzo non valido',
-                                 'Prima scrivi e salva l indirizzo base.')
-            return
-        write_text(BASE_FILE, base + '\n')
+        base = self._base()
 
         def job():
             self._run([sys.executable, '_build_repo.py', '--base', base])
-        self._work(job)
+
+        if base:
+            self._work(job)
 
     def commit_push(self):
-        message = self.message.get().strip() or 'Aggiornamento repository Kodi'
-        if not self.base.get().strip():
-            messagebox.showerror('Indirizzo non valido',
-                                 'Prima scrivi e salva l indirizzo base.')
+        base = self._base()
+        if not base:
             return
-        write_text(BASE_FILE, self.base.get().strip().rstrip('/') + '\n')
+        message = self.message.get().strip() or 'Aggiornamento repository Kodi'
 
         def job():
             self._run(['git', 'add', '-A'])
-            self._run(['git', 'status', '--porcelain'])
-            if not (self._last_output or '').strip():
+            _, staged = self._run(['git', 'status', '--porcelain'])
+            if not staged:
                 self._append('niente da committare.')
                 return
             self._run(['git', 'commit', '-m', message])
-            if self._run(['git', 'push', 'origin', 'main']) != 0:
+            code, _ = self._run(['git', 'push', 'origin', 'main'])
+            if code:
                 self._append('push non riuscito: controlla il remote '
                              '(git remote -v) e l accesso a GitHub.')
         self._work(job)
 
     def verify_online(self):
-        base = self.base.get().strip().rstrip('/')
-        if not base.startswith('http'):
-            messagebox.showerror('Indirizzo non valido',
-                                 'Prima scrivi e salva l indirizzo base.')
+        base = self._base()
+        if not base:
             return
 
         def job():
@@ -362,11 +369,11 @@ class App(object):
             self._append('ESITO: %s' % ('coerente' if remote == local
                                         else 'DIVERSO, ricarica il repository'))
             try:
-                root = ET.fromstring(data)
+                addons = ET.fromstring(data)
             except ET.ParseError as exc:
                 self._append('addons.xml illeggibile: %s' % exc)
                 return
-            for node in root.findall('addon'):
+            for node in addons.findall('addon'):
                 self._append('pubblicato: %s %s' % (node.get('id'),
                                                     node.get('version')))
         self._work(job)
@@ -375,7 +382,7 @@ class App(object):
         if not messagebox.askyesno(
                 'Nuova versione',
                 'Alzo la patch di %s e dei due User-Agent?'
-                % addon_version()):
+                % version_of(ADDON_DIR)):
             return
 
         def job():
@@ -392,36 +399,24 @@ class App(object):
             for name in ('playlist.py', 'archive_api.py'):
                 lib = os.path.join(ROOT, ADDON_DIR, 'resources', 'lib', name)
                 body = read_text(lib)
-                if not body:
-                    continue
-                write_text(lib, body.replace('%d.%d.%d' % (major, minor, patch),
-                                             '%d.%d.%d' % (major, minor, patch + 1)))
+                if body:
+                    write_text(lib, body.replace('%d.%d.%d' % (major, minor, patch),
+                                                 '%d.%d.%d' % (major, minor, patch + 1)))
             self.message.set('Ghost-Stream %d.%d.%d.' % (major, minor, patch + 1))
-            self._append('nuova versione: %s (prima %s)'
-                         % (new, old))
+            self._append('nuova versione: %s (prima %s)' % (new, old))
         self._work(job)
 
     # --------------------------------------------------------------- sorgenti
-    def _profile_path(self):
-        stored = read_text(PROFILE_FILE).strip()
-        return stored or DEFAULT_PROFILE
-
     def _sources_path(self):
         return os.path.join(self.profile.get().strip() or DEFAULT_PROFILE,
                             SOURCES_FILE)
 
     def load_sources(self):
         path = self._sources_path()
-        data = {}
-        if os.path.isfile(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as handle:
-                    data = json.load(handle)
-            except (OSError, ValueError) as exc:
-                self._append('sources.json illeggibile: %s' % exc)
-                return
-        if not isinstance(data, dict):
-            data = {}
+        data, error = read_json(path)
+        if error:
+            self._append('sources.json illeggibile: %s' % error)
+            return
         self.tv_url.set(str(data.get('tv_url') or ''))
         self.epg_url.set(str(data.get('epg_url') or ''))
         for box, key in ((self.tv_list, 'tv_urls'), (self.epg_list, 'epg_urls')):
@@ -454,26 +449,12 @@ class App(object):
             self.channel_list.delete(index)
 
     def save_sources(self):
-        try:
-            write_text(PROFILE_FILE, self.profile.get().strip() + '\n')
-        except OSError:
-            pass
         path = self._sources_path()
-        data = {}
-        if os.path.isfile(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as handle:
-                    data = json.load(handle)
-            except (OSError, ValueError):
-                data = {}
-        if not isinstance(data, dict):
-            data = {}
+        data, _ = read_json(path)
         data['tv_url'] = self.tv_url.get().strip()
-        data['tv_urls'] = [str(url).strip() for url in self.tv_list.get(0, 'end')
-                          if str(url).strip()]
+        data['tv_urls'] = self._lines(self.tv_list)
         data['epg_url'] = self.epg_url.get().strip()
-        data['epg_urls'] = [str(url).strip() for url in self.epg_list.get(0, 'end')
-                            if str(url).strip()]
+        data['epg_urls'] = self._lines(self.epg_list)
         channels = []
         for line in self.channel_list.get(0, 'end'):
             name, _, url = line.rpartition(' | ')
@@ -489,8 +470,13 @@ class App(object):
         self._append('sorgenti salvate in %s (%d liste, %d guide, %d canali)'
                      % (path, len(data['tv_urls']), len(data['epg_urls']),
                         len(channels)))
-        self._append('in Kodi: sezione TV in chiaro -> aggiorna (tasto destro '
-                     'o voce Aggiorna) per rileggere liste e guida.')
+        self._append('in Kodi: sezione TV in chiaro -> aggiorna per rileggere '
+                     'liste e guida.')
+
+    @staticmethod
+    def _lines(box):
+        return [str(url).strip() for url in box.get(0, 'end')
+                if str(url).strip()]
 
 
 def main():
