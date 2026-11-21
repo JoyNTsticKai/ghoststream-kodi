@@ -964,4 +964,69 @@ check(playlist.groups(sporca) == [('', 1)],
 check(playlist.in_group(sporca, '') == sporca,
       'il filtro per gruppo vuoto lo trova')
 
+print('22) copie dello stesso canale sotto un nome solo (SD/HD)')
+check(tv.variant_label('Rai 1 HD (1080p)') == 'HD 1080p',
+      'etichetta della copia: parola e risoluzione')
+check(tv.variant_label('Rai 1 (720p)') == '720p', 'solo risoluzione')
+check(tv.variant_label('Rai 1') == '', 'canale senza qualita: nessuna etichetta')
+
+parziale = tv.group_channels([
+    {'name': 'Rai 1 (720p)', 'url': 'http://example.com/a.m3u8', 'logo': ''},
+    {'name': 'Rai 1 HD', 'url': 'http://example.com/b.m3u8', 'logo': '',
+     'epg': '21:00 Telegiornale', 'epg_ok': True, 'plot': 'In onda: Telegiornale'}])
+check(len(parziale) == 1 and parziale[0].get('epg') == '21:00 Telegiornale'
+      and parziale[0].get('epg_ok'),
+      'la guida di una copia vale per tutto il canale')
+
+doppia = os.path.join(workdir, 'doppia.m3u')
+with open(doppia, 'w', encoding='utf-8') as handle:
+    handle.write('#EXTM3U\n')
+    handle.write('#EXTINF:-1 tvg-id="Rai1.it@SD" group-title="Rai",Rai 1\n')
+    handle.write('http://example.com/rai1-sd.m3u8\n')
+    handle.write('#EXTINF:-1 tvg-id="Rai1.it@HD" group-title="Rai",'
+                 'Rai 1 HD (1080p)\n')
+    handle.write('http://example.com/rai1-hd.m3u8\n')
+    handle.write('#EXTINF:-1 group-title="Rai",Rai 1 (720p)\n')
+    handle.write('http://example.com/rai1-720.m3u8\n')
+    handle.write('#EXTINF:-1 tvg-id="Rai2.it@SD" group-title="Rai",Rai 2\n')
+    handle.write('http://example.com/rai2.m3u8\n')
+
+saved_tv_url = SETTINGS.get('tv_url')
+SETTINGS['tv_url'] = doppia
+# La lista si passa esplicitamente: channels() non legge le impostazioni.
+canali = tv.group_channels(tv.channels(doppia, force=True))
+check(len(canali) == 2, 'quattro flussi ma due canali in elenco: %s' %
+      [(entry['name'], len(entry.get('variants') or [])) for entry in canali])
+rai1 = [entry for entry in canali if entry['name'].startswith('Rai 1')][0]
+check(len(rai1['variants']) == 3, 'tre copie sotto Rai 1')
+check([copia['variant'] for copia in rai1['variants']] ==
+      ['HD 1080p', '720p', ''], 'copie migliori per prime, senza qualita in fondo')
+
+run('?mode=tv')
+labels = [item['label'] for item in ITEMS]
+check(sum(1 for label in labels if label.startswith('Rai 1')) == 1,
+      'una sola voce Rai 1 in elenco: %s' % labels)
+voce = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+check(voce['folder'] and 'mode=tv_var' in voce['url'] and '(3)' in voce['label'],
+      'la voce apre il sottomenu con quante copie ci sono')
+
+run('?mode=tv_var&k=rai1')
+check(len(ITEMS) == 3, 'il sottomenu mostra le tre copie')
+check(ITEMS[0]['label'].startswith('HD 1080p'),
+      'prima la copia migliore: %s' % ITEMS[0]['label'])
+check(not ITEMS[0]['folder'] and 'rai1-hd.m3u8' in ITEMS[0]['url'],
+      'scegliendo la copia si riproduce il flusso giusto')
+check(all('Telegiornale' in item['label'] for item in ITEMS),
+      'ogni copia porta il programma in onda')
+
+run('?mode=tv_var&k=inesistente')
+check(ITEMS == [], 'canale sconosciuto: nessun elenco rotto')
+
+if saved_tv_url is None:
+    SETTINGS.pop('tv_url', None)
+else:
+    SETTINGS['tv_url'] = saved_tv_url
+
+tv.channels(tv_list, force=True)
+
 print('ESITO OK')

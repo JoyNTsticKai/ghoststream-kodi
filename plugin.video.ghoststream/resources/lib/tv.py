@@ -300,6 +300,67 @@ def sort_channels(entries):
         entry['number'] or UNNUMBERED, playlist.order_key(entry.get('name') or '')))
 
 
+_QUALITY_WORD = re.compile(r'\b(fhd|uhd|hd|sd|4k)\b', re.I)
+_QUALITY_TAG = re.compile(r'\((\d{3,4}p)\)', re.I)
+
+
+def variant_label(name):
+    """Cosa distingue una copia dello stesso canale: 'HD 1080p', '720p'.
+
+    Serve al sottomenu SD/HD: senza etichetta le due voci sarebbero identiche.
+    """
+    text = (name or '').strip()
+    parts = []
+    word = _QUALITY_WORD.search(text)
+    if word:
+        parts.append(word.group(1).upper())
+    size = _QUALITY_TAG.search(text)
+    if size:
+        parts.append(size.group(1).lower())
+    return ' '.join(parts)
+
+
+def _quality_rank(entry):
+    """Copie migliori per prime: 4K, 1080p, 720p, HD, SD."""
+    label = (entry.get('variant') or '').lower()
+    for score, words in ((5, ('2160', '4k', 'uhd')), (4, ('1080', 'fhd')),
+                         (3, ('720',)), (2, ('hd',)), (1, ('sd',))):
+        if any(word in label for word in words):
+            return score
+    return 0
+
+
+def group_channels(entries):
+    """Una voce sola per canale, con i flussi dentro 'variants'.
+
+    'Rai 1 (1080p)' e 'Rai 1 HD (720p)' diventano un canale solo: il
+    sottomenu mostra le copie, invece di due doppioni in elenco.
+    """
+    order = []
+    merged = {}
+    for entry in entries or ():
+        item = dict(entry)
+        key = (channel_key(plain_name(item.get('name'))) or
+               channel_key(item.get('name')) or 'url:' + (item.get('url') or ''))
+        item['key'] = key
+        item['variant'] = variant_label(item.get('name'))
+        base = merged.get(key)
+        if base is None:
+            item['variants'] = [item]
+            merged[key] = item
+            order.append(key)
+            continue
+        base['variants'].append(item)
+        # La guida puo' esserci su una copia sola: vale per tutto il canale.
+        for field in ('epg', 'epg_next', 'plot', 'epg_ok'):
+            if item.get(field) and not base.get(field):
+                base[field] = item[field]
+    channels = [merged[key] for key in order]
+    for channel in channels:
+        channel['variants'].sort(key=_quality_rank, reverse=True)
+    return channels
+
+
 def parse_time(value):
     """'20261121180000 +0100' -> epoch UTC; 0 se illeggibile."""
     match = _TIME.match((value or '').strip())

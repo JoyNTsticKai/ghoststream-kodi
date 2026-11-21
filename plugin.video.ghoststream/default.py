@@ -717,6 +717,16 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
             entry_group = playlist.clean_group(entry.get('group'))
             if entry_group and group is None:
                 label += '  [COLOR=grey](%s)[/COLOR]' % entry_group
+            variants = entry.get('variants') or []
+            if len(variants) > 1:
+                # Stesso canale con piu' flussi: si sceglie nel sottomenu.
+                label += '  [COLOR=grey](%d)[/COLOR]' % len(variants)
+                add_item(label, url(mode='tv_var', k=entry.get('key')),
+                         art=logo_art(entry['logo']),
+                         info={'title': label,
+                               'plot': entry.get('plot') or entry['url'],
+                               'mediatype': 'video'})
+                continue
             if entry.get('epg'):
                 label += '  [COLOR=grey]%s: %s[/COLOR]' % (t(30038), entry['epg'])
             second = ''
@@ -872,6 +882,8 @@ def show_tv():
         log('guida TV non disponibile: %s' % exc)
         guide = {}
     entries = tv.with_guide(entries, guide)
+    # Le copie dello stesso canale (SD/HD/720p) stanno sotto una voce sola.
+    entries = tv.group_channels(entries)
     guided = [entry for entry in entries if entry.get('epg_ok')]
     if not guided:
         # Meglio dirlo che mostrare 359 canali senza nemmeno una scritta.
@@ -899,6 +911,49 @@ def show_tv():
     show_entries(entries, refresh_target=url(mode='tv_refresh'),
                  page=page, group=group, extra_rows=extra, order='file',
                  order_row=False)
+    end('videos')
+
+
+def show_tv_variants():
+    """Sottomenu SD/HD di un canale che nella lista ha piu' flussi."""
+    key = PARAMS.get('k', '')
+    try:
+        entries = tv.channels(setting_text('tv_url', ''))
+    except tv.TvError as exc:
+        log('TV non disponibile: %s' % exc)
+        notify(t(30034), True)
+        end()
+        return
+    try:
+        guide = tv.guide(setting_text('epg_url', ''))
+    except tv.TvError as exc:
+        log('guida TV non disponibile: %s' % exc)
+        guide = {}
+
+    channels = tv.group_channels(tv.with_guide(entries, guide))
+    channel = None
+    for item in channels:
+        if item.get('key') == key:
+            channel = item
+            break
+    if not channel:
+        notify(t(30035))
+        end()
+        return
+
+    for variant in channel.get('variants') or []:
+        label = variant.get('variant') or playlist.clean_name(
+            variant.get('name') or '')
+        if variant.get('epg'):
+            label += '  [COLOR=grey]%s: %s[/COLOR]' % (t(30038), variant['epg'])
+        second = ''
+        if variant.get('epg_next'):
+            second = '%s: %s' % (t(30039), variant['epg_next'])
+        add_item(label, entry_url(variant), art=logo_art(variant.get('logo')),
+                 info={'title': variant.get('name') or label,
+                       'plot': variant.get('plot') or variant.get('url'),
+                       'mediatype': 'video'},
+                 playable=True, second=second)
     end('videos')
 
 
@@ -1111,6 +1166,8 @@ def main():
         remove_list(PARAMS.get('id', ''))
     elif mode == 'tv':
         show_tv()
+    elif mode == 'tv_var':
+        show_tv_variants()
     elif mode == 'tv_refresh':
         refresh_tv()
     elif mode == 'order':
