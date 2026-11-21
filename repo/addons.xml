@@ -24,7 +24,7 @@
 </addon>
 <addon id="plugin.video.ghoststream"
        name="Ghost-Stream"
-       version="1.8.6"
+       version="1.8.7"
        provider-name="locale">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>

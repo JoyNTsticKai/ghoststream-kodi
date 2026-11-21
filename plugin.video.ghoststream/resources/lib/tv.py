@@ -17,6 +17,8 @@ locali, le web TV) vanno in fondo, in ordine di nome.
 
 import calendar
 import gzip
+import json
+import os
 import re
 import time
 import urllib.request
@@ -37,6 +39,12 @@ GUIDE_CACHE = 'epg.json'
 # Sorgenti scelte dall'interfaccia Tkinter (_gui_tk.py): liste e guide in piu'
 # e canali singoli, senza toccare le impostazioni di Kodi.
 SOURCES_FILE = 'sources.json'
+# Sorgenti predefinite che viaggiano dentro l'addon: stanno nello zip, quindi
+# arrivano a tutti con l'aggiornamento della repository. L'utente puo' sempre
+# aggiungere le sue, che si sommano a queste.
+BUILTIN_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    'resources', 'sources.json')
 CHANNELS_MAX_AGE = 12 * 3600
 GUIDE_MAX_AGE = 8 * 3600
 DOWNLOAD_LIMIT = 12 * 1024 * 1024
@@ -124,10 +132,39 @@ def channels(url='', force=False):
     return sort_channels(found + custom_channels(found))
 
 
-def sources():
-    """Sorgenti aggiunte dall'interfaccia: liste, guide e canali singoli."""
-    data = playlist_store.read_data(SOURCES_FILE)
+def builtin_sources():
+    """Sorgenti predefinite dell'addon (resources/sources.json), se ci sono."""
+    try:
+        with open(BUILTIN_FILE, 'r', encoding='utf-8') as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return {}
     return data if isinstance(data, dict) else {}
+
+
+def sources():
+    """Sorgenti: quelle dentro l'addon piu' quelle scelte dall'interfaccia.
+
+    Le predefinite arrivano con l'aggiornamento dell'addon; quelle dell'utente
+    (sources.json nella cartella dati) si sommano e, se indicano la lista o la
+    guida principale, vincono sulle predefinite.
+    """
+    data = dict(builtin_sources())
+    mine = playlist_store.read_data(SOURCES_FILE)
+    if not isinstance(mine, dict):
+        return data
+    for key in ('tv_url', 'epg_url'):
+        value = str(mine.get(key) or '').strip()
+        if value:
+            data[key] = value
+    for key in ('tv_urls', 'epg_urls'):
+        extra = _clean_urls(mine.get(key) or [])
+        if extra:
+            data[key] = _clean_urls((data.get(key) or []) + extra)
+    if mine.get('channels'):
+        data['channels'] = (list(data.get('channels') or []) +
+                            list(mine.get('channels') or []))
+    return data
 
 
 def _clean_urls(values):

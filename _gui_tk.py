@@ -214,7 +214,10 @@ class App(object):
         ttk.Button(tab, text='Salva sorgenti', command=self.save_sources).grid(
             row=15, column=0, sticky='w', pady=(12, 0))
         ttk.Label(tab, text=('Le sorgenti si salvano in sources.json: l addon '
-                             'le usa accanto alle impostazioni di Kodi.'),
+                             'le usa accanto alle impostazioni di Kodi. Le '
+                             'predefinite arrivano dentro l addon '
+                             '(resources/sources.json) e si aggiornano con la '
+                             'repository: quelle scritte qui si aggiungono.'),
                   wraplength=700, foreground='#555').grid(
             row=16, column=0, columnspan=3, sticky='w', pady=(8, 0))
 

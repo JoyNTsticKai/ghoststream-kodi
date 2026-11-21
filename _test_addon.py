@@ -901,4 +901,38 @@ check([entry['name'] for entry in tv.sort_channels(
            {'name': 'A Canale', 'number': 1}])] == ['A Canale', 'B Canale'],
       'il numero scritto nella lista (tvg-chno) vince')
 
+print('20) sorgenti predefinite dentro l addon (repo)')
+builtin_path = os.path.join(workdir, 'builtin-sources.json')
+saved_builtin = tv.BUILTIN_FILE
+tv.BUILTIN_FILE = builtin_path
+check(tv.sources() == {}, 'senza file predefinito non cambia niente')
+with open(builtin_path, 'w', encoding='utf-8') as handle:
+    json.dump({'tv_url': tv_list, 'tv_urls': [extra_list],
+               'epg_urls': ['http://example.com/predefinita.xml'],
+               'channels': [{'name': 'Canale Predefinito',
+                             'url': 'http://example.com/pre.m3u8'}]}, handle)
+check(tv.channel_sources('') == [tv_list, extra_list],
+      'liste predefinite valide per tutti')
+check('http://example.com/predefinita.xml' in tv.guide_sources(''),
+      'guida predefinita usata')
+nomi = [entry['name'] for entry in tv.channels('', force=True)]
+check('Canale Predefinito' in nomi, 'canale predefinito in elenco')
+with open(sources_path, 'w', encoding='utf-8') as handle:
+    json.dump({'tv_urls': ['http://example.com/mia.m3u'],
+               'channels': [{'name': 'Canale Utente',
+                             'url': 'http://example.com/utente.m3u8'}]},
+              handle)
+check(tv.channel_sources('') ==
+      [tv_list, extra_list, 'http://example.com/mia.m3u'],
+      'le sorgenti dell utente si sommano alle predefinite')
+nomi = [entry['name'] for entry in tv.channels('', force=True)]
+check('Canale Predefinito' in nomi and 'Canale Utente' in nomi,
+      'predefinite e sorgenti dell utente convivono')
+os.remove(sources_path)
+tv.BUILTIN_FILE = saved_builtin
+check(tv.sources() == tv.builtin_sources(),
+      'tornando al file vero non resta niente appeso')
+check(tv.channel_sources('') == [tv.LIST_URL],
+      'senza sorgenti predefinite vale la lista iptv-org')
+
 print('ESITO OK')

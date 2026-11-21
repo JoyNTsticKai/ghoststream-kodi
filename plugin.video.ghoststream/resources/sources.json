@@ -1,0 +1,8 @@
+{
+ "_comment": "Sorgenti predefinite di Ghost-Stream: viaggiano dentro lo zip dell'addon, quindi arrivano a tutti e si aggiornano con la repository. tv_url/epg_url sostituiscono la lista e la guida predefinite; tv_urls/epg_urls si aggiungono; channels sono canali singoli. Le sorgenti dell'utente (sources.json nella cartella dati, dall'interfaccia) si sommano a queste.",
+ "tv_url": "",
+ "tv_urls": [],
+ "epg_url": "",
+ "epg_urls": [],
+ "channels": []
+}
