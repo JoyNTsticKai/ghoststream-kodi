@@ -943,4 +943,25 @@ check(tv.sources() == tv.builtin_sources(),
 check(tv.channel_sources('') == [tv.LIST_URL],
       'senza sorgenti predefinite vale la lista iptv-org')
 
+print('21) nomi e gruppi sporchi delle liste pubbliche')
+check(playlist.clean_group('Undefined') == '' and
+      playlist.clean_group('   ') == '' and
+      playlist.clean_group('Sport') == 'Sport',
+      'i gruppi finti diventano nessun gruppo')
+check(playlist.clean_name('Canale 5 [Geo-blocked]') == 'Canale 5' and
+      playlist.clean_name('Rai 1 HD (1080p)') == 'Rai 1 HD (1080p)',
+      'i bollini di stato escono dal nome, la qualita resta')
+sporca = playlist.parse('#EXTM3U\n'
+                        '#EXTINF:-1 tvg-id="x" group-title="Undefined",'
+                        'Canale 5 [Geo-blocked]\n'
+                        'http://example.com/a.m3u8\n')
+check(sporca[0]['group'] == '' and sporca[0]['name'] == 'Canale 5',
+      'la lista letta arriva gia pulita')
+check(not playlist.has_groups(sporca),
+      'un gruppo finto non fa comparire l opzione per gruppi')
+check(playlist.groups(sporca) == [('', 1)],
+      'il canale finisce tra quelli senza gruppo')
+check(playlist.in_group(sporca, '') == sporca,
+      'il filtro per gruppo vuoto lo trova')
+
 print('ESITO OK')

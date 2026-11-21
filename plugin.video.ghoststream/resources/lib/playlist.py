@@ -15,7 +15,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 
-USER_AGENT = 'plugin.video.ghoststream/1.8.8 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.8.9 (Kodi addon)'
 
 PLAYLIST_EXTENSIONS = ('.m3u', '.m3u8')
 # Con l'estensione di un video non si legge nulla: si riproduce e basta.
@@ -30,6 +30,26 @@ _SCHEME = re.compile(r'^[a-zA-Z][\w+.-]*://')
 _WINDOWS_PATH = re.compile(r'^[a-zA-Z]:[\\/]')
 _NUMBERS = re.compile(r'(\d+)')
 _BRACKETS = re.compile(r'\[[^\]]*\]')
+
+# Valori con cui molte liste dichiarano "nessun gruppo": non meritano una
+# parentesi accanto al nome (la lista italiana di iptv-org scrive "Undefined").
+_JUNK_GROUPS = frozenset(('undefined', 'undef', 'unknown', 'none', 'null',
+                          'n/d', 'n/a', 'na', '-', '--', '?', 'nd'))
+
+# Bollini di stato che finiscono dentro il nome: "Canale 5 [Geo-blocked]".
+_NOISE_TAGS = re.compile(
+    r'\s*\[(geo[- ]?blocked|not 24/7|not 24-7|offline|deprecated)\]', re.I)
+
+
+def clean_group(value):
+    """Gruppo vuoto quando la lista scrive 'Undefined' o simili."""
+    text = (value or '').strip()
+    return '' if text.lower() in _JUNK_GROUPS else text
+
+
+def clean_name(value):
+    """Toglie dal nome i bollini di stato tipo '[Geo-blocked]'."""
+    return _NOISE_TAGS.sub('', value or '').strip()
 
 # "Il", "La", "The": in un elenco di canali non contano per l'ordine.
 _ARTICLES = ('il ', 'lo ', 'la ', 'i ', 'gli ', 'le ', "l'", 'l\u2019',
@@ -82,14 +102,14 @@ SORT_ORDERS = ('az', 'group', 'number', 'file')
 
 
 def has_groups(entries):
-    return any((entry.get('group') or '').strip() for entry in entries or [])
+    return any(clean_group(entry.get('group')) for entry in entries or [])
 
 
 def groups(entries):
     """[(nome, quanti)] in ordine alfabetico, i canali senza gruppo in fondo."""
     counts = {}
     for entry in entries or []:
-        name = (entry.get('group') or '').strip()
+        name = clean_group(entry.get('group'))
         counts[name] = counts.get(name, 0) + 1
     return sorted(counts.items(), key=lambda pair: (not pair[0], order_key(pair[0])))
 
@@ -99,7 +119,7 @@ def in_group(entries, group):
     if group is None:
         return list(entries or [])
     return [entry for entry in entries or []
-            if (entry.get('group') or '').strip() == group]
+            if clean_group(entry.get('group')) == group]
 
 
 def sort_entries(entries, order='az'):
@@ -109,7 +129,7 @@ def sort_entries(entries, order='az'):
         return items
     if order == 'group':
         return sorted(items, key=lambda entry: (
-            fold(entry.get('group') or ''), order_key(entry.get('name'))))
+            fold(clean_group(entry.get('group'))), order_key(entry.get('name'))))
     if order == 'number':
         return sorted(items, key=lambda entry: (
             entry.get('number') or 0, order_key(entry.get('name'))))
@@ -228,14 +248,14 @@ def parse(text):
             tail = body.rsplit(',', 1)[-1].strip() if ',' in body else ''
             name = tail or (attrs.get('tvg-name') or '').strip()
             logo = (attrs.get('tvg-logo') or '').strip()
-            group = (attrs.get('group-title') or '').strip()
+            group = clean_group(attrs.get('group-title'))
             continue
 
         if line.startswith('#'):
             continue
 
         entries.append({
-            'name': name or guess_name(line),
+            'name': clean_name(name) or guess_name(line),
             'url': line,
             'logo': logo,
             'group': group,

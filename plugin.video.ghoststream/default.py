@@ -710,16 +710,20 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
         shown = 'az' if order == 'group' else order
         current = shown
         for entry in playlist.sort_entries(entries, shown):
-            label = entry['name']
-            if entry['group'] and group is None:
-                label += '  [COLOR=grey](%s)[/COLOR]' % entry['group']
+            # Nome e gruppo si ripuliscono anche qui e non solo al caricamento:
+            # le copie in cache contengono ancora i valori sporchi delle liste
+            # pubbliche ('[Geo-blocked]', 'Undefined').
+            label = playlist.clean_name(entry.get('name') or '')
+            entry_group = playlist.clean_group(entry.get('group'))
+            if entry_group and group is None:
+                label += '  [COLOR=grey](%s)[/COLOR]' % entry_group
             if entry.get('epg'):
                 label += '  [COLOR=grey]%s: %s[/COLOR]' % (t(30038), entry['epg'])
             second = ''
             if entry.get('epg_next'):
                 second = '%s: %s' % (t(30039), entry['epg_next'])
             add_item(label, entry_url(entry), art=logo_art(entry['logo']),
-                     info={'title': entry['name'],
+                     info={'title': playlist.clean_name(entry['name']),
                            'plot': entry.get('plot') or entry['url'],
                            'mediatype': 'video'},
                      playable=True, second=second)
