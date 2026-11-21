@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addon id="repository.ghoststream"
+       name="Ghost-Stream Repository"
+       version="1.0.0"
+       provider-name="locale">
+  <extension point="xbmc.addon.repository" name="Ghost-Stream Repository">
+    <dir>
+      <info compressed="false">__REPO_BASE__/addons.xml</info>
+      <checksum>__REPO_BASE__/addons.xml.md5</checksum>
+      <datadir zip="true">__REPO_BASE__/</datadir>
+    </dir>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="it_IT">Repository di Ghost-Stream</summary>
+    <description lang="it_IT">Con questo repository installato Kodi aggiorna da solo Ghost-Stream quando esce una versione nuova.</description>
+    <platform>all</platform>
+    <license>GPL-2.0-only</license>
+    <assets>
+      <icon>icon.png</icon>
+      <fanart>fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>

@@ -1,0 +1,104 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: plugin.video.ghoststream\n"
+"Language: it_IT\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgctxt "#30000"
+msgid "YouTube ufficiale"
+msgstr "YouTube ufficiale"
+
+msgctxt "#30001"
+msgid "Internet Archive"
+msgstr "Internet Archive"
+
+msgctxt "#30002"
+msgid "La mia raccolta"
+msgstr "La mia raccolta"
+
+msgctxt "#30003"
+msgid "Cerca su Internet Archive..."
+msgstr "Cerca su Internet Archive..."
+
+msgctxt "#30004"
+msgid "Nessun risultato"
+msgstr "Nessun risultato"
+
+msgctxt "#30005"
+msgid "Pagina successiva"
+msgstr "Pagina successiva"
+
+msgctxt "#30006"
+msgid "Errore di rete: controlla la connessione."
+msgstr "Errore di rete: controlla la connessione."
+
+msgctxt "#30007"
+msgid "Imposta la cartella della raccolta nelle impostazioni."
+msgstr "Imposta la cartella della raccolta nelle impostazioni."
+
+msgctxt "#30008"
+msgid "Nessun file video riproducibile."
+msgstr "Nessun file video riproducibile."
+
+msgctxt "#30009"
+msgid "L'addon YouTube non risulta installato."
+msgstr "L'addon YouTube non risulta installato."
+
+msgctxt "#30010"
+msgid "La cartella non esiste o non e' accessibile."
+msgstr "La cartella non esiste o non e' accessibile."
+
+msgctxt "#30011"
+msgid "Carica un link (M3U o video)"
+msgstr "Carica un link (M3U o video)"
+
+msgctxt "#30012"
+msgid "Incolla il link della lista M3U/M3U8 o del video (Ctrl+V per incollare)"
+msgstr "Incolla il link della lista M3U/M3U8 o del video (Ctrl+V per incollare)"
+
+msgctxt "#30013"
+msgid "Incolla il link di una lista M3U/M3U8 o di un video: l'addon lo legge e mostra i canali o gli episodi."
+msgstr "Incolla il link di una lista M3U/M3U8 o di un video: l'addon lo legge e mostra i canali o gli episodi."
+
+msgctxt "#30015"
+msgid "Link non valido, lista vuota o file non leggibile."
+msgstr "Link non valido, lista vuota o file non leggibile."
+
+msgctxt "#30016"
+msgid "consigliato"
+msgstr "consigliato"
+
+msgctxt "#30017"
+msgid "Nome della lista"
+msgstr "Nome della lista"
+
+msgctxt "#30018"
+msgid "Salvare questa lista tra le mie sorgenti?"
+msgstr "Salvare questa lista tra le mie sorgenti?"
+
+msgctxt "#30019"
+msgid "Lista salvata"
+msgstr "Lista salvata"
+
+msgctxt "#30020"
+msgid "Aggiorna la lista"
+msgstr "Aggiorna la lista"
+
+msgctxt "#30021"
+msgid "Rimuovi la lista"
+msgstr "Rimuovi la lista"
+
+msgctxt "#30022"
+msgid "Rimuovere \"%s\" dalle mie sorgenti?"
+msgstr "Rimuovere \"%s\" dalle mie sorgenti?"
+
+msgctxt "#30023"
+msgid "Elenco aggiornato"
+msgstr "Elenco aggiornato"
+
+msgctxt "#30024"
+msgid "Aggiornamento non riuscito: uso la copia salvata."
+msgstr "Aggiornamento non riuscito: uso la copia salvata."

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<settings>
+  <category label="Sorgenti">
+    <setting id="source_load" type="bool" label="Mostra &quot;Carica un link&quot; e le liste salvate" default="true"/>
+    <setting id="source_youtube" type="bool" label="Mostra YouTube ufficiale" default="true"/>
+    <setting id="source_archive" type="bool" label="Mostra Internet Archive" default="true"/>
+    <setting id="source_local" type="bool" label="Mostra la mia raccolta locale" default="false"/>
+  </category>
+
+  <category label="TV in chiaro">
+    <setting id="source_tv" type="bool" label="Mostra TV in chiaro nel menu" default="true"/>
+    <setting id="tv_url" type="text" label="Lista canali M3U (vuoto = lista italiana pubblica iptv-org)" default=""/>
+    <setting id="epg_url" type="text" label="Guida TV XMLTV (vuoto = guide italiane pubbliche unite: open-epg + epgshare)" default=""/>
+  </category>
+
+  <category label="Riproduzione">
+    <setting id="isa_manifests" type="bool" label="Affida i flussi HLS/DASH a inputstream.adaptive (buffer a segmenti: consigliato per le dirette; togli la spunta solo se un canale non parte)" default="true"/>
+  </category>
+
+  <category label="Liste e link">
+    <setting id="m3u_url" type="text" label="Ultimo link caricato" default=""/>
+  </category>
+
+  <category label="YouTube">
+    <setting id="yt_extra" type="text" label="Canali/playlist aggiuntivi separati da , o ; - incolla un ID (UC... o PL...) o il link del canale (youtube.com/channel/UC... oppure youtube.com/@nome) o della playlist (youtube.com/playlist?list=PL...)" default=""/>
+  </category>
+
+  <category label="Internet Archive">
+    <setting id="ia_rows" type="number" label="Risultati per pagina" default="30"/>
+  </category>
+
+  <category label="Raccolta locale">
+    <setting id="local_path" type="folder" label="Cartella della raccolta (cartella o NAS) - struttura consigliata Cartone/Stagione 1/Episodio 01.mp4; poster.jpg, folder.jpg o fanart.jpg nella cartella diventano copertina e sfondo" default="" source="auto"/>
+  </category>
+</settings>
