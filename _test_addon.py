@@ -738,7 +738,12 @@ tv.guide = lambda url='', force=False: guide_data
 run('?mode=tv')
 labels = [item['label'] for item in ITEMS]
 print('   canali: %s' % labels)
-check(len(ITEMS) == 6, 'tre canali, ordine, filtro e Aggiorna')
+check(len(ITEMS) == 5, 'tre canali, filtro e Aggiorna')
+check([label.split('  ')[0] for label in labels[:3]] ==
+      ['Rai 1', 'Rai 2', 'Canale Senza Guida'],
+      'canali in ordine di numero, chi non ha numero in fondo')
+check(not any(label.startswith('Ordine dei canali') for label in labels),
+      'in TV non serve la scelta dell\'ordine')
 check(any(label.startswith('Rai 1') and 'Telegiornale' in label
           for label in labels), 'programma in onda accanto al canale')
 rai1 = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
@@ -754,7 +759,7 @@ check(filtro and '(2)' in filtro[0]['label'],
 
 run('?mode=tv&only=epg')
 labels = [item['label'] for item in ITEMS]
-check(len(ITEMS) == 5 and not any(label.startswith('Canale Senza Guida')
+check(len(ITEMS) == 4 and not any(label.startswith('Canale Senza Guida')
                                   for label in labels),
       'filtro attivo: solo canali con guida')
 check(any(label == 'Tutti i canali' for label in labels),
@@ -771,7 +776,7 @@ def offline_guide(url='', force=False):
 
 tv.guide = offline_guide
 run('?mode=tv')
-check(len(ITEMS) == 5 and all('Telegiornale' not in item['label']
+check(len(ITEMS) == 4 and all('Telegiornale' not in item['label']
                               for item in ITEMS),
       'senza guida i canali restano elencati')
 tv.guide = original_guide
@@ -878,5 +883,22 @@ check(views.stored_view(radice) == 0, 'database assente: nessuna vista da legger
 run('')
 check('Container.SetViewMode(66036)' in BUILTINS,
       'aprendo il menu la vista scelta viene applicata davvero')
+
+print('19) canali TV in ordine di numero (Rai 1, Rai 2, Rai 3...)')
+disordinati = [{'name': 'Zeta TV'}, {'name': 'Canale 5 HD'},
+               {'name': 'Rai 2'}, {'name': 'Rete 4'}, {'name': 'Rai 1'},
+               {'name': 'Nove'}, {'name': 'Rai 1 HD'},
+               {'name': 'QVC (Italy)'}, {'name': 'Boing (Italy) HD'}]
+check([entry['name'] for entry in tv.sort_channels(disordinati)] ==
+      ['Rai 1', 'Rai 1 HD', 'Rai 2', 'Rete 4', 'Canale 5 HD', 'Nove',
+       'QVC (Italy)', 'Boing (Italy) HD', 'Zeta TV'],
+      'nazionali in ordine di canale, gli altri in fondo per nome')
+check(tv.channel_number('Canale 5 HD (1080p)') == 5 and
+      tv.channel_number('LA7 HD') == 7,
+      'qualita e parentesi non cambiano il numero')
+check([entry['name'] for entry in tv.sort_channels(
+          [{'name': 'B Canale', 'number': 2},
+           {'name': 'A Canale', 'number': 1}])] == ['A Canale', 'B Canale'],
+      'il numero scritto nella lista (tvg-chno) vince')
 
 print('ESITO OK')

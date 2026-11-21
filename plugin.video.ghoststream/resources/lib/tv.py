@@ -8,6 +8,11 @@ sola guida copre solo una parte dei canali. Entrambe si possono sostituire
 dalle impostazioni e restano in cache nella cartella dati, cosi' la sezione si
 apre anche senza rete. Le TV locali non hanno una guida pubblica: per quelle
 resta solo il nome del canale.
+
+L'elenco segue il numero di canale del telecomando (Rai 1, Rai 2, Rai 3, Rete 4,
+Canale 5, Italia 1...): l'ordine alfabetico della lista M3U non c'entra con
+quello che si vede sul televisore. I canali senza un numero nazionale (le TV
+locali, le web TV) vanno in fondo, in ordine di nome.
 """
 
 import calendar
@@ -40,6 +45,29 @@ TIMEOUT = 25
 _SUFFIX = re.compile(r'\.(?:it|de|fr|es|uk|us|ch|at)$')
 _PARENTHESIS = re.compile(r'\([^)]*\)')
 _TIME = re.compile(r'^(\d{14})(?:\s*([+-])(\d{2})(\d{2}))?')
+# Qualita' nel nome: 'Rai 1 HD (1080p)' e 'Rai 1' sono lo stesso canale.
+_QUALITY = re.compile(r'\b(?:hd|sd|fhd|uhd|4k|hq)\b')
+_BRACKETS = re.compile(r'\[[^\]]*\]')
+
+# Numero di canale italiano (LCN): l'ordine del telecomando. Solo i nazionali
+# hanno un numero fisso; le TV locali cambiano da regione a regione e restano
+# fuori da questa tabella.
+NUMBERS = {
+    'rai1': 1, 'rai2': 2, 'rai3': 3,
+    'rete4': 4, 'canale5': 5, 'italia1': 6,
+    'la7': 7, 'tv8': 8, 'nove': 9,
+    '20': 20, '20mediaset': 20,
+    'rai4': 21, 'iris': 22, 'rai5': 23, 'raimovie': 24, 'raipremium': 25,
+    'cielo': 26, 'twentyseven': 27, 'tv2000': 28, 'la7d': 29, 'la5': 30,
+    'realtime': 31, 'qvc': 32, 'foodnetwork': 33, 'cine34': 34, 'focus': 35,
+    'rtl1025tv': 36, 'radioitalia': 37, 'giallo': 38, 'topcrime': 39,
+    'boing': 40, 'k2': 41, 'cartoonito': 42, 'raigulp': 43, 'raiyoyo': 44,
+    'super': 47, 'rainews24': 48, 'tgcom24': 51, 'dmax': 52,
+    'deejaytv': 53, 'raistoria': 54, 'mediasetextra': 55, 'hgtv': 56,
+    'raiscuola': 57, 'discoverychannel': 58, 'motortrend': 59,
+    'sportitalia': 60, 'supertennis': 64, 'italia2': 66,
+}
+UNNUMBERED = 9999
 
 
 class TvError(Exception):
@@ -64,7 +92,7 @@ def channels(url='', force=False):
     fresh = (list(cache.get('urls') or []) == urls and
              time.time() - (cache.get('fetched') or 0) < CHANNELS_MAX_AGE)
     if entries and fresh and not force:
-        return entries + custom_channels(entries)
+        return sort_channels(list(entries) + custom_channels(entries))
     found = []
     errors = []
     seen = set()
@@ -85,7 +113,7 @@ def channels(url='', force=False):
             found.append(entry)
     if not found:
         if entries:
-            return entries + custom_channels(entries)
+            return sort_channels(list(entries) + custom_channels(entries))
         raise TvError('lista canali non leggibile: %s'
                       % ('; '.join(errors) or 'nessuna fonte'))
     try:
@@ -93,7 +121,7 @@ def channels(url='', force=False):
             'urls': urls, 'fetched': int(time.time()), 'entries': found})
     except playlist_store.StoreError:
         pass
-    return found + custom_channels(found)
+    return sort_channels(found + custom_channels(found))
 
 
 def sources():
@@ -203,6 +231,36 @@ def channel_key(value):
     text = text.split('@')[0]
     text = _SUFFIX.sub('', text.strip())
     return re.sub(r'[^a-z0-9]+', '', text)
+
+
+def plain_name(name):
+    """'Rai 1 HD (1080p)' -> 'rai 1': via qualita' e parentesi dal nome."""
+    text = _BRACKETS.sub(' ', _PARENTHESIS.sub(' ', name or ''))
+    return _QUALITY.sub(' ', text.lower()).strip()
+
+
+def channel_number(name='', number=0):
+    """Numero di canale: tvg-chno della lista, altrimenti il LCN italiano."""
+    try:
+        fixed = int(number or 0)
+    except (TypeError, ValueError):
+        fixed = 0
+    return fixed or NUMBERS.get(channel_key(plain_name(name)), 0)
+
+
+def sort_channels(entries):
+    """Nazionali in ordine di numero di canale, poi gli altri per nome.
+
+    Le copie portano con se' 'number', cosi' anche l'ordine "per numero di
+    canale" delle liste mostra gli stessi numeri.
+    """
+    items = []
+    for entry in entries or ():
+        item = dict(entry)
+        item['number'] = channel_number(item.get('name'), item.get('number'))
+        items.append(item)
+    return sorted(items, key=lambda entry: (
+        entry['number'] or UNNUMBERED, playlist.order_key(entry.get('name') or '')))
 
 
 def parse_time(value):

@@ -689,9 +689,9 @@ def ask_save(target, kind='list', entries=None, props=None, headers=None):
 
 
 def show_entries(entries, refresh_target=None, page=None, group=None,
-                 extra_rows=None):
+                 extra_rows=None, order=None, order_row=True):
     page = dict(page or {'mode': 'loaded'})
-    order = list_order()
+    order = order or list_order()
     grouped = playlist.has_groups(entries)
 
     if group is None and order == 'group' and grouped:
@@ -714,10 +714,12 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
                            'mediatype': 'video'},
                      playable=True)
 
-    order_params = {'mode': 'order', 'back': url(**page), 'cur': current}
-    if grouped:
-        order_params['groups'] = '1'
-    add_item('%s: %s' % (t(30025), order_label(current)), url(**order_params))
+    if order_row:
+        order_params = {'mode': 'order', 'back': url(**page), 'cur': current}
+        if grouped:
+            order_params['groups'] = '1'
+        add_item('%s: %s' % (t(30025), order_label(current)),
+                 url(**order_params))
 
     # Righe in coda alla sezione (per la TV: il filtro dei canali con guida).
     for label, target, art in extra_rows or []:
@@ -875,8 +877,11 @@ def show_tv():
         label = '%s  [COLOR=grey](%d)[/COLOR]' % (t(30036), len(guided))
         extra.append((label, url(only='epg', **page), source_art('tv')))
 
+    # La TV segue l'ordine del telecomando (tv.channels lo ha gia' messo in
+    # fila): niente riga "Ordine dei canali", che ripartirebbe dall'alfabetico.
     show_entries(entries, refresh_target=url(mode='tv_refresh'),
-                 page=page, group=group, extra_rows=extra)
+                 page=page, group=group, extra_rows=extra, order='file',
+                 order_row=False)
     end('videos')
 
 

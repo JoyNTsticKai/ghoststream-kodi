@@ -24,7 +24,7 @@
 </addon>
 <addon id="plugin.video.ghoststream"
        name="Ghost-Stream"
-       version="1.8.5"
+       version="1.8.6"
        provider-name="locale">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>
@@ -34,7 +34,7 @@
   </extension>
   <extension point="xbmc.addon.metadata">
     <summary lang="it_IT">Vecchi cartoni e serie in italiano da fonti autorizzate</summary>
-            <description lang="it_IT">Sfoglia cartoni animati, serie e film d'epoca in italiano da Internet Archive (pubblico dominio o licenze libere), dai canali YouTube ufficiali (tramite l'addon YouTube gia installato) e dalla tua raccolta locale o su NAS. Puoi anche incollare un link a una lista M3U/M3U8 (anche un file locale) o a un video singolo: l'addon lo apre subito e, se vuoi, lo salva tra le tue sorgenti permanenti, con una riga e un'icona nel menu principale. Le liste di canali si ordinano alfabeticamente (ignorando articoli come Il, La, The), per gruppo o per numero di canale, e accettano #KODIPROP e #EXTVLCOPT. C'e' anche una sezione TV in chiaro con i canali italiani da liste pubbliche (iptv-org), i loro loghi e il programma in onda dalla guida XMLTV.</description>
+            <description lang="it_IT">Sfoglia cartoni animati, serie e film d'epoca in italiano da Internet Archive (pubblico dominio o licenze libere), dai canali YouTube ufficiali (tramite l'addon YouTube gia installato) e dalla tua raccolta locale o su NAS. Puoi anche incollare un link a una lista M3U/M3U8 (anche un file locale) o a un video singolo: l'addon lo apre subito e, se vuoi, lo salva tra le tue sorgenti permanenti, con una riga e un'icona nel menu principale. Le liste di canali si ordinano alfabeticamente (ignorando articoli come Il, La, The), per gruppo o per numero di canale, e accettano #KODIPROP e #EXTVLCOPT. C'e' anche una sezione TV in chiaro con i canali italiani da liste pubbliche (iptv-org), i loro loghi e il programma in onda dalla guida XMLTV; i canali sono in ordine di numero del telecomando (Rai 1, Rai 2, Rai 3, Rete 4, Canale 5...), con le TV locali in fondo.</description>
     <disclaimer lang="it_IT">L'addon non ospita nessun contenuto: collega solo fonti legittime e i tuoi file.</disclaimer>
     <platform>all</platform>
     <license>GPL-2.0-only</license>
