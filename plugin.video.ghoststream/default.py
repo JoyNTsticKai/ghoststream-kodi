@@ -1041,6 +1041,9 @@ def play(target, title='', extra=''):
         item.setInfo('video', {'title': title})
     target = apply_stream_props(item, target, extra)
     item.setPath(target)
+    chosen = item.getProperty('inputstream') or 'predefinito (demuxer Kodi)'
+    manifest = item.getProperty('inputstream.adaptive.manifest_type') or '-'
+    log('player scelto: %s | manifest: %s' % (chosen, manifest))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
 
 

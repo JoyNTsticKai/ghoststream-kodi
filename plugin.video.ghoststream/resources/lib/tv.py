@@ -29,6 +29,9 @@ GUIDE_URLS = (
 )
 CHANNEL_CACHE = 'tv.json'
 GUIDE_CACHE = 'epg.json'
+# Sorgenti scelte dall'interfaccia Tkinter (_gui_tk.py): liste e guide in piu'
+# e canali singoli, senza toccare le impostazioni di Kodi.
+SOURCES_FILE = 'sources.json'
 CHANNELS_MAX_AGE = 12 * 3600
 GUIDE_MAX_AGE = 8 * 3600
 DOWNLOAD_LIMIT = 12 * 1024 * 1024
@@ -54,37 +57,97 @@ def _download(url):
 
 
 def channels(url='', force=False):
-    """Voci della lista canali, dalla cache se fresca o dalla rete."""
-    url = url or LIST_URL
+    """Voci di tutte le liste canali, dalla cache se fresca o dalla rete."""
+    urls = channel_sources(url)
     cache = playlist_store.read_data(CHANNEL_CACHE)
     entries = cache.get('entries') or []
-    fresh = (cache.get('url') == url and
+    fresh = (list(cache.get('urls') or []) == urls and
              time.time() - (cache.get('fetched') or 0) < CHANNELS_MAX_AGE)
     if entries and fresh and not force:
-        return entries
-    try:
-        result = playlist.load(url)
-    except playlist.PlaylistError as exc:
+        return entries + custom_channels(entries)
+    found = []
+    errors = []
+    seen = set()
+    for source in urls:
+        try:
+            result = playlist.load(source)
+        except playlist.PlaylistError as exc:
+            errors.append('%s (%s)' % (source, exc))
+            continue
+        if result['stream'] or not result['entries']:
+            errors.append('%s (nessun canale)' % source)
+            continue
+        for entry in result['entries']:
+            link = entry.get('url')
+            if not link or link in seen:
+                continue
+            seen.add(link)
+            found.append(entry)
+    if not found:
         if entries:
-            return entries
-        raise TvError('lista canali non leggibile: %s' % exc)
-    if result['stream'] or not result['entries']:
-        if entries:
-            return entries
-        raise TvError('la lista non contiene canali')
+            return entries + custom_channels(entries)
+        raise TvError('lista canali non leggibile: %s'
+                      % ('; '.join(errors) or 'nessuna fonte'))
     try:
         playlist_store.write_data(CHANNEL_CACHE, {
-            'url': url, 'fetched': int(time.time()),
-            'entries': result['entries']})
+            'urls': urls, 'fetched': int(time.time()), 'entries': found})
     except playlist_store.StoreError:
         pass
-    return result['entries']
+    return found + custom_channels(found)
+
+
+def sources():
+    """Sorgenti aggiunte dall'interfaccia: liste, guide e canali singoli."""
+    data = playlist_store.read_data(SOURCES_FILE)
+    return data if isinstance(data, dict) else {}
+
+
+def _clean_urls(values):
+    """Link in ordine, senza doppioni e senza righe vuote."""
+    urls = []
+    for value in values or ():
+        url = str(value or '').strip()
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
+def channel_sources(url=''):
+    """Liste dei canali: la scelta dell'utente piu' quelle aggiunte.
+
+    Senza una lista scelta resta quella pubblica italiana, cosi' aggiungere
+    una lista non fa sparire i canali nazionali.
+    """
+    data = sources()
+    primary = _clean_urls([url, data.get('tv_url')])
+    extras = _clean_urls(data.get('tv_urls') or [])
+    return _clean_urls((primary or [LIST_URL]) + extras)
 
 
 def guide_sources(url=''):
-    """Una sola guida se l'utente la indica, altrimenti tutte quelle pubbliche."""
-    url = (url or '').strip()
-    return (url,) if url else GUIDE_URLS
+    """Guide TV: la scelta dell'utente piu' quelle aggiunte, o le pubbliche."""
+    data = sources()
+    primary = _clean_urls([url, data.get('epg_url')])
+    extras = _clean_urls(data.get('epg_urls') or [])
+    return tuple(_clean_urls((primary or list(GUIDE_URLS)) + extras))
+
+
+def custom_channels(existing=()):
+    """Canali singoli aggiunti a mano dall'interfaccia."""
+    known = {entry.get('url') for entry in existing or ()}
+    entries = []
+    for item in sources().get('channels') or []:
+        if not isinstance(item, dict):
+            continue
+        link = str(item.get('url') or '').strip()
+        if not link or link in known:
+            continue
+        known.add(link)
+        entries.append({'name': str(item.get('name') or '').strip() or link,
+                        'url': link,
+                        'logo': str(item.get('logo') or ''),
+                        'group': str(item.get('group') or '')})
+    return entries
 
 
 def merge_guides(parts):
@@ -108,7 +171,7 @@ def guide(url='', force=False):
     sources = guide_sources(url)
     cache = playlist_store.read_data(GUIDE_CACHE)
     data = cache.get('guide') or {}
-    fresh = (tuple(cache.get('sources') or ()) == sources and
+    fresh = (list(cache.get('sources') or []) == list(sources) and
              time.time() - (cache.get('fetched') or 0) < GUIDE_MAX_AGE)
     if data and fresh and not force:
         return data

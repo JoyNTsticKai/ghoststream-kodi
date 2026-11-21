@@ -6,3 +6,4 @@ unsloth-tmp/
 /*.zip
 /repository.wltv-1.0.3/
 /.token*
+/gui_profile.txt

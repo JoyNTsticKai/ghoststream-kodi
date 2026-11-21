@@ -63,6 +63,9 @@ class ListItem(object):
     def setProperty(self, key, value):
         self.props[key] = value
 
+    def getProperty(self, key):
+        return self.props.get(key, '')
+
     def addContextMenuItems(self, items, replaceItems=False):
         self.context = list(items)
 
@@ -104,7 +107,8 @@ class Dialog(object):
 xbmc = types.ModuleType('xbmc')
 xbmc.LOGINFO = 1
 xbmc.LOGERROR = 4
-xbmc.log = lambda *args, **kwargs: None
+LOGS = []
+xbmc.log = lambda message, *args, **kwargs: LOGS.append(message)
 xbmc.Keyboard = Keyboard
 xbmc.executebuiltin = lambda command, *args, **kwargs: BUILTINS.append(command)
 xbmc.getCondVisibility = (lambda condition: 'inputstream.adaptive' in condition)
@@ -454,6 +458,10 @@ run('?' + query)
 check(RESOLVED[-1]['props'].get('inputstream') == 'inputstream.adaptive' and
       RESOLVED[-1]['mime'] == 'application/vnd.apple.mpegurl',
       'un manifest di rete senza direttive va al buffer di adaptive')
+check([line for line in LOGS if 'player scelto' in line],
+      'il log della riproduzione dice quale player e stato scelto')
+check(any('player scelto: inputstream.adaptive' in line for line in LOGS),
+      'il log nomina inputstream.adaptive quando lo usa')
 
 SETTINGS['isa_manifests'] = 'false'
 run('?' + query)
@@ -800,5 +808,38 @@ check(merged['programmes']['rai1'][0][2] == 'Telegiornale',
 check(tv.guide_sources('http://example.com/mia.xml') ==
       ('http://example.com/mia.xml',),
       'una guida scelta dall utente resta l unica usata')
+
+print('17) sorgenti multiple e canali singoli (sources.json)')
+extra_list = os.path.join(workdir, 'extra.m3u')
+with open(extra_list, 'w', encoding='utf-8') as handle:
+    handle.write('#EXTM3U\n')
+    handle.write('#EXTINF:-1 group-title="Altri",Canale Extra\n')
+    handle.write('http://example.com/extra.m3u8\n')
+    handle.write('#EXTINF:-1 group-title="Altri",Rai 1 doppione\n')
+    handle.write('http://example.com/rai1.m3u8\n')
+sources_path = os.path.join(PROFILE_ROOT, 'sources.json')
+with open(sources_path, 'w', encoding='utf-8') as handle:
+    json.dump({'tv_url': tv_list,
+               'tv_urls': [extra_list],
+               'epg_urls': ['http://example.com/extra.xml'],
+               'channels': [{'name': 'Mio Canale',
+                             'url': 'http://example.com/mio.m3u8'}]},
+              handle)
+check(tv.channel_sources('') == [tv_list, extra_list],
+      'liste M3U aggiuntive accanto a quella scelta')
+check(tv.guide_sources('') == tv.GUIDE_URLS + ('http://example.com/extra.xml',),
+      'guide aggiuntive accanto a quelle pubbliche')
+sorgenti = tv.channels('', force=True)
+nomi = [entry['name'] for entry in sorgenti]
+check('Canale Extra' in nomi, 'i canali della seconda lista ci sono')
+check('Rai 1' in nomi, 'i canali della lista principale restano')
+check(nomi.count('Rai 1 doppione') == 0,
+      'lo stesso link non entra due volte')
+check('Mio Canale' in nomi, 'il canale singolo aggiunto a mano compare')
+check('Mio Canale' in [entry['name'] for entry in tv.channels('')],
+      'il canale singolo compare anche con la cache fresca')
+os.remove(sources_path)
+check('Mio Canale' not in [entry['name'] for entry in tv.channels('', force=True)],
+      'senza sources.json il canale singolo sparisce')
 
 print('ESITO OK')
