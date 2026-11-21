@@ -12,6 +12,7 @@ Per aggiungere una nuova sorgente:
 
 import json
 import os
+import re
 import shutil
 import sys
 import traceback
@@ -105,7 +106,40 @@ LABELS = {
     30038: 'In onda',
     30039: 'Dopo',
     30040: 'Guida TV non disponibile: premi "Aggiorna la lista" per riprovare.',
+    30041: 'Principale',
 }
+
+# Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
+# il programma successivo sparirebbe fuori schermo.
+LABEL_WIDTH = 84
+AFTER_MARK = u'\u2192'
+_MARKUP = re.compile(r'\[/?COLOR[^\]]*\]')
+
+
+def guide_label(base, entry, width=LABEL_WIDTH):
+    """Nome del canale con 'In onda' e 'Dopo' nella stessa riga.
+
+    La vista lista mostra solo la label (la Label2 non viene disegnata): il
+    programma successivo va quindi qui, altrimenti resta invisibile. Il
+    programma in onda non si accorcia mai: se lo spazio finisce si taglia
+    solo quello dopo, partendo dal titolo e tenendone l'orario.
+    """
+    text = base
+    used = len(_MARKUP.sub('', base))
+    now = entry.get('epg') or ''
+    if now:
+        chunk = '%s: %s' % (t(30038), now)
+        text += '  [COLOR=grey]%s[/COLOR]' % chunk
+        used += 2 + len(chunk)
+    after = entry.get('epg_next') or ''
+    if after:
+        room = width - used - 3
+        if room >= 7:
+            tail = after
+            if len(tail) > room:
+                tail = tail[:room - 1].rstrip() + u'\u2026'
+            text += '  [COLOR=grey]%s %s[/COLOR]' % (AFTER_MARK, tail)
+    return text
 
 
 # --------------------------------------------------------------------------
@@ -721,14 +755,14 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
             if len(variants) > 1:
                 # Stesso canale con piu' flussi: si sceglie nel sottomenu.
                 label += '  [COLOR=grey](%d)[/COLOR]' % len(variants)
+                label = guide_label(label, entry)
                 add_item(label, url(mode='tv_var', k=entry.get('key')),
                          art=logo_art(entry['logo']),
                          info={'title': label,
                                'plot': entry.get('plot') or entry['url'],
                                'mediatype': 'video'})
                 continue
-            if entry.get('epg'):
-                label += '  [COLOR=grey]%s: %s[/COLOR]' % (t(30038), entry['epg'])
+            label = guide_label(label, entry)
             second = ''
             if entry.get('epg_next'):
                 second = '%s: %s' % (t(30039), entry['epg_next'])
@@ -942,10 +976,10 @@ def show_tv_variants():
         return
 
     for variant in channel.get('variants') or []:
-        label = variant.get('variant') or playlist.clean_name(
-            variant.get('name') or '')
-        if variant.get('epg'):
-            label += '  [COLOR=grey]%s: %s[/COLOR]' % (t(30038), variant['epg'])
+        # Il flusso senza sigla e' quello principale: se restasse senza nome
+        # non si capirebbe cosa si sta per scegliere.
+        label = variant.get('variant') or t(30041)
+        label = guide_label(label, variant)
         second = ''
         if variant.get('epg_next'):
             second = '%s: %s' % (t(30039), variant['epg_next'])

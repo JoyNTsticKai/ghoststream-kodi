@@ -14,6 +14,13 @@ import time
 import types
 import urllib.parse
 
+try:
+    # Le etichette TV contengono la freccia del 'Dopo': la console Windows
+    # in cp1252 non saprebbe scriverla e la prova si fermerebbe.
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+except Exception:
+    pass
+
 ITEMS = []
 RESOLVED = []
 SETTINGS = {
@@ -757,6 +764,17 @@ check('Dopo: Film della sera' in rai1['info']['plot'],
       'prossimo programma nel dettaglio')
 check(rai1['label2'].startswith('Dopo:') and 'Film della sera' in rai1['label2'],
       'prossimo programma sulla seconda riga')
+check(u'\u2192' in rai1['label'] and 'Film della sera' in rai1['label'],
+      'il dopo sta anche nella label: la vista lista non disegna Label2')
+check('Telegiornale' in rai1['label'],
+      'il programma in onda resta per intero nella label')
+guide_label = sys.modules['default'].guide_label
+lungo = guide_label('Rai 1', {'epg': '21:00 ' + 'T' * 40,
+                              'epg_next': '22:00 ' + 'F' * 40})
+check('21:00 ' + 'T' * 40 in lungo,
+      'quando lo spazio finisce il titolo in onda non si taglia')
+check(u'\u2192 22:00' in lungo and u'\u2026' in lungo,
+      'si accorcia solo il dopo, tenendone l orario: %s' % lungo)
 senza = [item for item in ITEMS if item['label'].startswith('Canale Senza Guida')][0]
 check('Telegiornale' not in senza['label'] and not senza['label2'],
       'canale senza guida resta pulito')
@@ -1000,7 +1018,8 @@ check(len(canali) == 2, 'quattro flussi ma due canali in elenco: %s' %
 rai1 = [entry for entry in canali if entry['name'].startswith('Rai 1')][0]
 check(len(rai1['variants']) == 3, 'tre copie sotto Rai 1')
 check([copia['variant'] for copia in rai1['variants']] ==
-      ['HD 1080p', '720p', ''], 'copie migliori per prime, senza qualita in fondo')
+      ['', 'HD 1080p', '720p'],
+      'il flusso senza sigla in cima, poi le copie migliori')
 
 run('?mode=tv')
 labels = [item['label'] for item in ITEMS]
@@ -1012,10 +1031,16 @@ check(voce['folder'] and 'mode=tv_var' in voce['url'] and '(3)' in voce['label']
 
 run('?mode=tv_var&k=rai1')
 check(len(ITEMS) == 3, 'il sottomenu mostra le tre copie')
-check(ITEMS[0]['label'].startswith('HD 1080p'),
-      'prima la copia migliore: %s' % ITEMS[0]['label'])
-check(not ITEMS[0]['folder'] and 'rai1-hd.m3u8' in ITEMS[0]['url'],
-      'scegliendo la copia si riproduce il flusso giusto')
+check(ITEMS[0]['label'].startswith('Principale'),
+      'prima il flusso principale, con un nome chiaro: %s' % ITEMS[0]['label'])
+check(not ITEMS[0]['folder'] and 'rai1-sd.m3u8' in ITEMS[0]['url'],
+      'la voce principale riproduce il flusso senza qualita')
+check(ITEMS[1]['label'].startswith('HD 1080p') and
+      'rai1-hd.m3u8' in ITEMS[1]['url'] and
+      ITEMS[2]['label'].startswith('720p'),
+      'poi le copie migliori: %s' % [item['label'] for item in ITEMS])
+check(all(item['label'].strip() for item in ITEMS),
+      'nessuna copia resta senza etichetta')
 check(all('Telegiornale' in item['label'] for item in ITEMS),
       'ogni copia porta il programma in onda')
 

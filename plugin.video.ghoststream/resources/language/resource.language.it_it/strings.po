@@ -102,3 +102,7 @@ msgstr "Elenco aggiornato"
 msgctxt "#30024"
 msgid "Aggiornamento non riuscito: uso la copia salvata."
 msgstr "Aggiornamento non riuscito: uso la copia salvata."
+
+msgctxt "#30041"
+msgid "Principale"
+msgstr "Principale"

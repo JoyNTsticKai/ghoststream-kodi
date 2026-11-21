@@ -321,8 +321,15 @@ def variant_label(name):
 
 
 def _quality_rank(entry):
-    """Copie migliori per prime: 4K, 1080p, 720p, HD, SD."""
+    """Copie migliori per prime, ma il flusso principale le precede.
+
+    La copia senza sigla (spesso 'Rai 1' accanto a 'Rai 1 HD') e' quasi
+    sempre quella scelta dall'elenco come principale: in fondo alla lista
+    sembrava l'ultima arrivata.
+    """
     label = (entry.get('variant') or '').lower()
+    if not label:
+        return 6
     for score, words in ((5, ('2160', '4k', 'uhd')), (4, ('1080', 'fhd')),
                          (3, ('720',)), (2, ('hd',)), (1, ('sd',))):
         if any(word in label for word in words):
