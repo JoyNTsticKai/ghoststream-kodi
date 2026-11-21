@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<addons>
+<addon id="repository.ghoststream"
+       name="Ghost-Stream Repository"
+       version="1.0.0"
+       provider-name="locale">
+  <extension point="xbmc.addon.repository" name="Ghost-Stream Repository">
+    <dir>
+      <info compressed="false">https://raw.githubusercontent.com/JoyNTsticKai/ghoststream-kodi/main/repo/addons.xml</info>
+      <checksum>https://raw.githubusercontent.com/JoyNTsticKai/ghoststream-kodi/main/repo/addons.xml.md5</checksum>
+      <datadir zip="true">https://raw.githubusercontent.com/JoyNTsticKai/ghoststream-kodi/main/repo/</datadir>
+    </dir>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="it_IT">Repository di Ghost-Stream</summary>
+    <description lang="it_IT">Con questo repository installato Kodi aggiorna da solo Ghost-Stream quando esce una versione nuova.</description>
+    <platform>all</platform>
+    <license>GPL-2.0-only</license>
+    <assets>
+      <icon>icon.png</icon>
+      <fanart>fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>
+<addon id="plugin.video.ghoststream"
+       name="Ghost-Stream"
+       version="1.8.3"
+       provider-name="locale">
+  <requires>
+    <import addon="xbmc.python" version="3.0.0"/>
+  </requires>
+  <extension point="xbmc.python.pluginsource" library="default.py">
+    <provides>video</provides>
+  </extension>
+  <extension point="xbmc.addon.metadata">
+    <summary lang="it_IT">Vecchi cartoni e serie in italiano da fonti autorizzate</summary>
+            <description lang="it_IT">Sfoglia cartoni animati, serie e film d'epoca in italiano da Internet Archive (pubblico dominio o licenze libere), dai canali YouTube ufficiali (tramite l'addon YouTube gia installato) e dalla tua raccolta locale o su NAS. Puoi anche incollare un link a una lista M3U/M3U8 (anche un file locale) o a un video singolo: l'addon lo apre subito e, se vuoi, lo salva tra le tue sorgenti permanenti, con una riga e un'icona nel menu principale. Le liste di canali si ordinano alfabeticamente (ignorando articoli come Il, La, The), per gruppo o per numero di canale, e accettano #KODIPROP e #EXTVLCOPT. C'e' anche una sezione TV in chiaro con i canali italiani da liste pubbliche (iptv-org), i loro loghi e il programma in onda dalla guida XMLTV.</description>
+    <disclaimer lang="it_IT">L'addon non ospita nessun contenuto: collega solo fonti legittime e i tuoi file.</disclaimer>
+    <platform>all</platform>
+    <license>GPL-2.0-only</license>
+    <assets>
+      <icon>resources/ghost-icon.png</icon>
+      <fanart>resources/ghost-fanart.jpg</fanart>
+    </assets>
+  </extension>
+</addon>
+</addons>

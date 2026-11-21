@@ -5,3 +5,4 @@ __pycache__/
 unsloth-tmp/
 /*.zip
 /repository.wltv-1.0.3/
+/.token*
