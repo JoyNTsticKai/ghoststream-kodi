@@ -102,6 +102,9 @@ LABELS = {
     30035: 'Nessun canale in questa lista.',
     30036: 'Solo canali con guida TV',
     30037: 'Tutti i canali',
+    30038: 'In onda',
+    30039: 'Dopo',
+    30040: 'Guida TV non disponibile: premi "Aggiorna la lista" per riprovare.',
 }
 
 
@@ -165,8 +168,12 @@ def source_art(name):
     return {}
 
 
-def add_item(label, target, art=None, info=None, playable=False, context=None):
+def add_item(label, target, art=None, info=None, playable=False, context=None,
+             second=None):
     item = xbmcgui.ListItem(label=label, offscreen=True)
+    if second:
+        # Seconda riga della voce: in Kodi e' label2, quella sotto il nome.
+        item.setLabel2(second)
     item_art = {'icon': ICON, 'thumb': ICON, 'fanart': FANART}
     if art:
         item_art.update({key: value for key, value in art.items() if value})
@@ -707,12 +714,15 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
             if entry['group'] and group is None:
                 label += '  [COLOR=grey](%s)[/COLOR]' % entry['group']
             if entry.get('epg'):
-                label += '  [COLOR=grey](%s)[/COLOR]' % entry['epg']
+                label += '  [COLOR=grey]%s: %s[/COLOR]' % (t(30038), entry['epg'])
+            second = ''
+            if entry.get('epg_next'):
+                second = '%s: %s' % (t(30039), entry['epg_next'])
             add_item(label, entry_url(entry), art=logo_art(entry['logo']),
                      info={'title': entry['name'],
                            'plot': entry.get('plot') or entry['url'],
                            'mediatype': 'video'},
-                     playable=True)
+                     playable=True, second=second)
 
     if order_row:
         order_params = {'mode': 'order', 'back': url(**page), 'cur': current}
@@ -859,6 +869,9 @@ def show_tv():
         guide = {}
     entries = tv.with_guide(entries, guide)
     guided = [entry for entry in entries if entry.get('epg_ok')]
+    if not guided:
+        # Meglio dirlo che mostrare 359 canali senza nemmeno una scritta.
+        notify(t(30040), True)
 
     page = {'mode': 'tv'}
     if group is not None:

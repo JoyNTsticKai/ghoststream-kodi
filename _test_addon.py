@@ -38,6 +38,7 @@ BUILTINS = []
 class ListItem(object):
     def __init__(self, label='', offscreen=False, path=''):
         self.label = label
+        self.label2 = ''
         self.path = path
         self.art = {}
         self.info = {}
@@ -51,6 +52,9 @@ class ListItem(object):
 
     def setMimeType(self, mime):
         self.mime = mime
+
+    def setLabel2(self, text):
+        self.label2 = text
 
     def setArt(self, art):
         self.art.update(art)
@@ -126,7 +130,8 @@ xbmcplugin = types.ModuleType('xbmcplugin')
 
 
 def addDirectoryItem(handle, target, item, isFolder=True):
-    ITEMS.append({'label': item.label, 'url': target, 'folder': isFolder,
+    ITEMS.append({'label': item.label, 'label2': item.label2, 'url': target,
+                  'folder': isFolder,
                   'art': dict(item.art), 'info': dict(item.info),
                   'context': list(item.context)})
     return True
@@ -748,10 +753,13 @@ check(any(label.startswith('Rai 1') and 'Telegiornale' in label
           for label in labels), 'programma in onda accanto al canale')
 rai1 = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
 check(rai1['art']['thumb'] == 'http://example.com/rai1.png', 'logo del canale')
-check('Ora: Film della sera' in rai1['info']['plot'],
+check('Dopo: Film della sera' in rai1['info']['plot'],
       'prossimo programma nel dettaglio')
+check(rai1['label2'].startswith('Dopo:') and 'Film della sera' in rai1['label2'],
+      'prossimo programma sulla seconda riga')
 senza = [item for item in ITEMS if item['label'].startswith('Canale Senza Guida')][0]
-check('Telegiornale' not in senza['label'], 'canale senza guida resta pulito')
+check('Telegiornale' not in senza['label'] and not senza['label2'],
+      'canale senza guida resta pulito')
 filtro = [item for item in ITEMS
           if item['label'].startswith('Solo canali con guida TV')]
 check(filtro and '(2)' in filtro[0]['label'],

@@ -396,7 +396,7 @@ def now_and_next(guide_data, tvg_id='', name='', at=None):
 
 
 def with_guide(entries, guide_data, at=None):
-    """Copia delle voci con 'epg' (programma in onda) e 'plot' arricchito.
+    """Copia delle voci con 'epg' (in onda), 'epg_next' (il dopo) e 'plot'.
 
     'epg_ok' dice se il canale compare nella guida, anche quando adesso non ha
     niente in onda: serve al filtro dei canali con la guida.
@@ -409,12 +409,19 @@ def with_guide(entries, guide_data, at=None):
         if items:
             item['epg_ok'] = True
             current, following = _pair(items, moment)
+            if following:
+                item['epg_next'] = '%s %s' % (clock(following[0]),
+                                              following[2][:40])
             if current:
                 item['epg'] = '%s %s' % (clock(current[0]), current[2][:40])
                 plot = 'In onda: %s (%s-%s)' % (current[2], clock(current[0]),
                                                 clock(current[1]))
                 if following:
-                    plot += '\nOra: %s (%s)' % (following[2], clock(following[0]))
+                    plot += '\nDopo: %s (%s)' % (following[2],
+                                                 clock(following[0]))
                 item['plot'] = plot
+            elif following:
+                item['plot'] = 'Dopo: %s (%s)' % (following[2],
+                                                  clock(following[0]))
         decorated.append(item)
     return decorated
