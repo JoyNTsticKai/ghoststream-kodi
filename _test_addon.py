@@ -1328,10 +1328,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.12 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.12 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.13 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.13 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.12"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.13"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1425,7 +1425,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.12' in handle.read(), 'addon.xml 1.9.12 anche nel file appena letto')
+    check('1.9.13' in handle.read(), 'addon.xml 1.9.13 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1694,7 +1694,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.12' in manifest, 'addon.xml 1.9.12')
+check('1.9.13' in manifest, 'addon.xml 1.9.13')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1916,6 +1916,51 @@ Dialog.ASKED = []
 Dialog.ANSWER = True
 run('?mode=play&u=http://example.com/02.mp4&title=Leggera')
 check(Dialog.ASKED == [], 'una puntata leggera non chiede niente')
+
+# Il segno pesante viaggia con la posizione salvata e con i preferiti.
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': [], 'fail': False})
+Dialog.ASKED = []
+Dialog.ANSWER = False          # qui interessa il segno, non il cambio di cache
+PLAYER.update({'playing': True, 'time': 60.0, 'total': 1480.0, 'seek': []})
+run('?mode=play&u=http://example.com/11.mkv&title=Pesante&heavy=1')
+progress.reset()
+progress.track_step(Player())
+salvata = progress.find('Pesante') or {}
+check(salvata.get('heavy') is True, 'il segno pesante si salva con la posizione')
+
+run('?mode=continue')
+riga = [item for item in ITEMS if item['label'].startswith('Pesante')][0]
+print('   continua: %s' % riga['url'])
+check('heavy=1' in riga['url'], 'Continua riporta il segno pesante')
+Dialog.ASKED = []
+CACHE['calls'] = []
+run('?' + urllib.parse.urlparse(riga['url']).query)
+check(len(Dialog.ASKED) == 1 and '20 MB' in Dialog.ASKED[0],
+      'riaprendo da Continua si chiede la cache')
+
+run('?mode=favorite&a=add&k=%s&t=%s&u=%s&heavy=1' % (
+    progress.key('Pesante'), urllib.parse.quote('Pesante'),
+    urllib.parse.quote('http://example.com/11.mkv', safe='')))
+check((favorites.find('Pesante') or {}).get('heavy') is True,
+      'la voce scelta ricorda il segno pesante')
+run('?mode=favorites')
+riga = [item for item in ITEMS if item['label'].startswith('Pesante')][0]
+print('   mia lista: %s' % riga['url'])
+check('heavy=1' in riga['url'], 'La mia lista riporta il segno pesante')
+Dialog.ASKED = []
+CACHE['calls'] = []
+run('?' + urllib.parse.urlparse(riga['url']).query)
+check(len(Dialog.ASKED) == 1 and '20 MB' in Dialog.ASKED[0],
+      'riaprendo da La mia lista si chiede la cache')
+
+# Una voce leggera resta leggera anche passando da Continua.
+run('?mode=play&u=http://example.com/02.mp4&title=Leggera')
+progress.reset()
+progress.track_step(Player())
+run('?mode=continue')
+leggera = [item for item in ITEMS if item['label'].startswith('Leggera')][0]
+check('heavy=1' not in leggera['url'],
+      'una puntata leggera non porta il segno pesante')
 Dialog.ANSWER = False
 
 print('ESITO OK')

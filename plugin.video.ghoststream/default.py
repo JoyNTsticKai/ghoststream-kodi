@@ -475,6 +475,8 @@ def favorite_menu(title, query, art, info):
     params = {'mode': 'favorite', 'k': name, 't': title,
               'u': query.get('u', ''), 'p': query.get('p', ''),
               'alt': query.get('alt', '')}
+    if query.get('heavy') == '1':
+        params['heavy'] = '1'
     thumb = (art or {}).get('thumb')
     fanart = (art or {}).get('fanart')
     # L'icona generica non e' una copertina: meglio lasciarla fuori.
@@ -927,6 +929,8 @@ def show_favorites():
             params['p'] = row['extra']
         if row.get('alt'):
             params['alt'] = row['alt']
+        if row.get('heavy'):
+            params['heavy'] = '1'
         # Il 'Togli da La mia lista' lo aggiunge add_item: una riga sola.
         info = {'title': title, 'plot': row.get('plot') or t(30059),
                 'mediatype': 'video'}
@@ -949,7 +953,8 @@ def favorite_action():
         if action == 'add':
             favorites.add(title, PARAMS.get('u', ''), PARAMS.get('p', ''),
                           art, PARAMS.get('pl', ''),
-                          alt=PARAMS.get('alt', ''))
+                          alt=PARAMS.get('alt', ''),
+                          heavy=PARAMS.get('heavy') == '1')
             notify(t(30056))
         elif action == 'remove':
             favorites.remove(title)
@@ -999,6 +1004,8 @@ def show_continue():
                   'title': entry.get('title') or ''}
         if entry.get('extra'):
             params['p'] = entry['extra']
+        if entry.get('heavy'):
+            params['heavy'] = '1'
         info = {'title': entry.get('title') or '', 'plot': t(30050),
                 'mediatype': 'video'}
         add_item(entry.get('title') or '', url(**params),
@@ -1905,7 +1912,7 @@ def wait_start(player, monitor, seconds=START_WAIT):
     return False
 
 
-def try_alternates(candidates, title, extra, art):
+def try_alternates(candidates, title, extra, art, heavy=False):
     """Se il flusso non parte, prova da solo la copia successiva.
 
     Si aspetta l'avvio prima di decidere (inputstream.adaptive puo' metterci
@@ -1936,7 +1943,7 @@ def try_alternates(candidates, title, extra, art):
         if title:
             try:
                 progress.begin(title, candidate['url'],
-                               candidate.get('extra', ''), 0, art)
+                               candidate.get('extra', ''), 0, art, heavy)
             except playlist_store.StoreError as exc:
                 log('posizione non seguita: %s' % exc)
         if wait_start(player, monitor):
@@ -1946,7 +1953,8 @@ def try_alternates(candidates, title, extra, art):
 
 def play(target, title='', extra=''):
     log('riproduco: %s' % target)
-    if PARAMS.get('heavy') == '1':
+    heavy = PARAMS.get('heavy') == '1'
+    if heavy:
         # Puntata che esiste solo in versione pesante: con la cache piccola
         # il buffer si svuota a meta'. Si chiede, non si cambia da soli.
         offer_cache()
@@ -1977,13 +1985,14 @@ def play(target, title='', extra=''):
         # Il servizio in sottofondo segue la riproduzione e salva la posizione:
         # questa pagina puo' chiudersi subito, la posizione non si perde.
         try:
-            progress.begin(title, PARAMS.get('u') or source, extra, start, art)
+            progress.begin(title, PARAMS.get('u') or source, extra, start, art,
+                           heavy)
         except playlist_store.StoreError as exc:
             log('posizione non seguita: %s' % exc)
     candidates = read_alternates(PARAMS.get('alt', ''))
     if candidates:
         # Nessun altro lo fa per noi: se il flusso non parte, si prova qui.
-        try_alternates(candidates, title, extra, art)
+        try_alternates(candidates, title, extra, art, heavy)
 
 
 # --------------------------------------------------------------------------

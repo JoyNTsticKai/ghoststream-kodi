@@ -64,11 +64,14 @@ def count():
     return len(load())
 
 
-def add(title, url='', extra='', art=None, plot='', kind='video', alt=''):
+def add(title, url='', extra='', art=None, plot='', kind='video', alt='',
+        heavy=False):
     """Aggiunge (o rinnova) una voce scelta; lo stesso titolo resta uno solo.
 
     alt sono le altre copie dello stesso canale: restano appese alla voce
     cosi' il ripiego automatico funziona anche partendo da La mia lista.
+    heavy segna le puntate che esistono solo in versione pesante, cosi' la
+    domanda sulla cache arriva anche da qui.
     """
     name = progress.key(title)
     if not name or not url:
@@ -80,6 +83,7 @@ def add(title, url='', extra='', art=None, plot='', kind='video', alt=''):
         'url': url,
         'extra': extra or '',
         'alt': alt or '',
+        'heavy': bool(heavy),
         'art': clean_art(art),
         'plot': plot or '',
         'kind': kind,
