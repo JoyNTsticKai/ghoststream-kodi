@@ -98,7 +98,13 @@ def watched(title):
     return bool(item and item.get('finished'))
 
 
-def store(title, url='', extra='', position=0, total=0):
+def _clean_art(art):
+    """Copertina e sfondo della voce: bastano per la riga di Continua."""
+    art = art if isinstance(art, dict) else {}
+    return {name: art[name] for name in ('thumb', 'fanart') if art.get(name)}
+
+
+def store(title, url='', extra='', position=0, total=0, art=None):
     """Salva la posizione raggiunta; ignora le dirette (durata sconosciuta)."""
     name = key(title)
     if not name or not total or float(total) < MIN_TOTAL:
@@ -113,6 +119,7 @@ def store(title, url='', extra='', position=0, total=0):
         'title': (title or '').strip() or item.get('title', ''),
         'url': url or item.get('url', ''),
         'extra': extra or item.get('extra', ''),
+        'art': _clean_art(art) or item.get('art') or {},
         'position': round(position, 1),
         'total': round(total, 1),
         'finished': bool(finished),
@@ -189,7 +196,7 @@ def time_text(seconds):
 # --------------------------------------------------------------------------
 # Riproduzione in corso: la segue il servizio, non la pagina dell'addon
 # --------------------------------------------------------------------------
-def begin(title, url='', extra='', start=0):
+def begin(title, url='', extra='', start=0, art=None):
     """Segna cosa sta partendo, cosi' il servizio sa cosa seguire."""
     if not title:
         return False
@@ -197,7 +204,7 @@ def begin(title, url='', extra='', start=0):
     data = _data()
     data['now'] = {'title': title.strip(), 'url': url or '',
                    'extra': extra or '', 'start': int(start or 0),
-                   'since': int(time.time())}
+                   'art': _clean_art(art), 'since': int(time.time())}
     try:
         _save(data)
     except playlist_store.StoreError:
@@ -265,7 +272,8 @@ def track_step(player):
     finished = position >= total * FINISHED_RATIO
     if position - saved < SAVE_EVERY and not (finished and saved < position):
         return 'play'
-    store(title, marker.get('url', ''), marker.get('extra', ''), position, total)
+    store(title, marker.get('url', ''), marker.get('extra', ''), position, total,
+          marker.get('art'))
     return 'play'
 
 
@@ -284,6 +292,6 @@ def _close(player, title, marker):
         total = float(item.get('total') or 0)
     if total >= MIN_TOTAL and position > 0:
         store(title, marker.get('url', ''), marker.get('extra', ''),
-              position, total)
+              position, total, marker.get('art'))
     end_now()
     return True

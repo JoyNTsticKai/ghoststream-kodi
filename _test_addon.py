@@ -255,8 +255,8 @@ sys.modules['xbmcvfs'] = xbmcvfs
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
-from resources.lib import (archive_api, playlist, playlist_store,  # noqa: E402
-                           progress, tv, views)
+from resources.lib import (archive_api, favorites, playlist,  # noqa: E402
+                           playlist_store, progress, tv, views)
 
 
 def run(param=''):
@@ -1199,8 +1199,8 @@ check(any('a=watch' in riga[1] for riga in a_meta['context']),
       'menu contestuale: segna come visto')
 check(any('a=unwatch' in riga[1] for riga in visto['context']),
       'menu contestuale: segna come non visto su una voce vista')
-check(all('mode=progress' in riga[1] for riga in a_meta['context']),
-      'le azioni sulle posizioni passano dal modo progress')
+azioni = [riga for riga in a_meta['context'] if 'mode=progress' in riga[1]]
+check(len(azioni) >= 2, 'le azioni sulle posizioni passano dal modo progress')
 
 run('')
 print('   menu: %s' % [item['label'] for item in ITEMS])
@@ -1270,13 +1270,103 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.3 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.3 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.4 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.4 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.3"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.4"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
       'il servizio segue la riproduzione in un filo suo')
+
+print('25) posta e copertina in Continua, e La mia lista')
+conlogo = os.path.join(workdir, 'con-logo.m3u')
+with open(conlogo, 'w', encoding='utf-8') as handle:
+    handle.write('#EXTM3U\n')
+    handle.write('#EXTINF:-1 tvg-logo="http://example.com/poster.png",'
+                 'Episodio con logo\n')
+    handle.write('http://example.com/logo.mp4\n')
+Dialog.ANSWER = False
+Keyboard.QUEUE = [conlogo]
+run('?mode=load')
+run('?mode=loaded')
+voce = ITEMS[0]
+print('   voci: %s' % [item['label'] for item in ITEMS])
+check('at=' in voce['url'],
+      'la copertina viaggia col link della voce: %s' % voce['url'][-60:])
+check(any('mode=favorite' in riga[1] for riga in voce['context']),
+      'menu contestuale: aggiungi a La mia lista')
+
+query = urllib.parse.urlparse(voce['url']).query
+PLAYER.update({'playing': True, 'time': 300.0, 'total': 1400.0, 'seek': []})
+run('?' + query)
+check(progress.now().get('art', {}).get('thumb') == 'http://example.com/poster.png',
+      'la copertina sta con la posizione in corso')
+progress.track_step(Player())
+check(progress.find('Episodio con logo')['art'].get('thumb') ==
+      'http://example.com/poster.png',
+      'copertina salvata insieme alla posizione')
+PLAYER.update({'playing': False, 'time': 0.0, 'total': 0.0})
+progress.track_step(Player())
+run('?mode=continue')
+riga = [item for item in ITEMS if 'Episodio con logo' in item['label']][0]
+check(riga['art']['thumb'] == 'http://example.com/poster.png',
+      'la pagina Continua mostra il poster, non l icona generica')
+
+check(favorites.has('Episodio con logo') is False, 'la lista parte vuota')
+run('?mode=favorite&a=add&k=%s&t=%s&u=%s&i=%s' % (
+    progress.key('Episodio con logo'),
+    urllib.parse.quote('Episodio con logo'),
+    urllib.parse.quote('http://example.com/logo.mp4', safe=''),
+    urllib.parse.quote('http://example.com/poster.png', safe='')))
+check(favorites.has('Episodio con logo'), 'la voce entra in La mia lista')
+voce_scelta = favorites.find('Episodio con logo')
+check(voce_scelta['url'] == 'http://example.com/logo.mp4' and
+      voce_scelta['art']['thumb'] == 'http://example.com/poster.png',
+      'la voce scelta porta con se link e copertina')
+check(any('Container.Refresh' in command for command in BUILTINS),
+      'aggiungendo la voce la pagina si ridisegna')
+
+favorites.add('Doppione', 'http://example.com/dup.mp4')
+favorites.add('Doppione', 'http://example.com/dup.mp4')
+check(favorites.count() == 2, 'lo stesso titolo non si duplica')
+check(favorites.remove('Doppione') and not favorites.has('Doppione'),
+      'la voce si toglie per titolo')
+favorites.add('Doppione', 'http://example.com/dup.mp4')
+
+run('')
+print('   menu: %s' % [item['label'] for item in ITEMS])
+check(ITEMS[0]['label'].startswith('La mia lista') and
+      'mode=favorites' in ITEMS[0]['url'],
+      'La mia lista in cima al menu: %s' % ITEMS[0]['label'])
+check(ITEMS[1]['label'].startswith('Continua a guardare'),
+      'subito sotto, Continua a guardare')
+
+run('?mode=favorites')
+print('   mia lista: %s' % [item['label'] for item in ITEMS])
+check(len(ITEMS) == 2 and
+      [item['label'].split('  [')[0] for item in ITEMS] ==
+      ['Doppione', 'Episodio con logo'],
+      'la pagina elenca le voci scelte, dalla piu recente')
+scelto = [item for item in ITEMS if item['label'].startswith('Episodio con logo')][0]
+check(scelto['art']['thumb'] == 'http://example.com/poster.png',
+      'nella pagina si vede la copertina salvata')
+check(scelto['folder'] is False and 'mode=play' in scelto['url'],
+      'la voce scelta si riapre subito')
+check(any('a=remove' in riga[1] for riga in scelto['context']),
+      'menu contestuale: togli da La mia lista')
+
+run('?mode=favorite&a=remove&k=%s&t=%s' % (
+    progress.key('Episodio con logo'), urllib.parse.quote('Episodio con logo')))
+check(not favorites.has('Episodio con logo'),
+      'togli dalla mia lista elimina la voce')
+run('?mode=favorites')
+check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
+      'la pagina resta coerente dopo il togli')
+
+check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
+      'La mia lista vive nella cartella dati, non nei setting')
+with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
+    check('1.9.4' in handle.read(), 'addon.xml 1.9.4 anche nel file appena letto')
 
 print('ESITO OK')

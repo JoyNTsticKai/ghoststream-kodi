@@ -26,7 +26,7 @@ import xbmcplugin
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import (archive_api, local, naming, playlist,
+from resources.lib import (archive_api, favorites, local, naming, playlist,
                            playlist_store, progress, tv, views, youtube)
 
 ADDON = xbmcaddon.Addon()
@@ -119,6 +119,13 @@ LABELS = {
     30050: 'Riprendi i video da dove li avevi lasciati.',
     30051: 'visto',
     30052: 'Segnato come non visto',
+    30053: 'Aggiungi a La mia lista',
+    30054: 'Togli da La mia lista',
+    30055: 'La mia lista',
+    30056: 'Aggiunto a La mia lista',
+    30057: 'Tolto da La mia lista',
+    30058: 'La mia lista e vuota: aggiungi una voce dal menu contestuale.',
+    30059: 'Le voci che hai scelto, in cima al menu.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -223,9 +230,10 @@ def add_item(label, target, art=None, info=None, playable=False, context=None,
     riferirsi a due titoli diversi.
     """
     info = dict(info or {})
-    query = play_params(target) if (playable and track) else {}
+    query = play_params(target) if playable else {}
     title = query.get('title', '') if query.get('mode') == 'play' else ''
-    marker = progress.find(title) if title else None
+    # Le dirette (track=False) non hanno posizione: niente 'Riprendi da'.
+    marker = progress.find(title) if (title and track) else None
     if marker and marker.get('finished'):
         info['playcount'] = 1
         label = '%s  [COLOR=green](%s)[/COLOR]' % (label, t(30051))
@@ -234,9 +242,6 @@ def add_item(label, target, art=None, info=None, playable=False, context=None,
         info['playcount'] = 0
         label = '%s  [COLOR=grey]%s %s[/COLOR]' % (
             label, t(30042), progress.time_text(marker.get('position')))
-    if title:
-        context = list(context or []) + progress_menu(title, marker, query)
-
     item = xbmcgui.ListItem(label=label, offscreen=True)
     if second:
         # Seconda riga della voce: in Kodi e' label2, quella sotto il nome.
@@ -245,6 +250,13 @@ def add_item(label, target, art=None, info=None, playable=False, context=None,
     if art:
         item_art.update({key: value for key, value in art.items() if value})
     item.setArt(item_art)
+    if title:
+        # Cosa si puo' fare con la voce: scelta, segno di visto, Continua.
+        context = list(context or []) + favorite_menu(title, query, item_art, info)
+        if track:
+            context += progress_menu(title, marker, query)
+            # La copertina viaggia col link: la pagina Continua la mostrera'.
+            target = with_art(target, item_art)
     if info:
         item.setInfo('video', info)
     if playable:
@@ -362,6 +374,42 @@ def progress_menu(title, marker, query):
     return rows
 
 
+def with_art(target, art):
+    """Copertina nel link: chi riproduce la salva insieme alla posizione."""
+    params = {}
+    for name, value in (('at', (art or {}).get('thumb')),
+                        ('af', (art or {}).get('fanart'))):
+        # L'icona generica dell'addon non e' una copertina: non si salva.
+        if value and value not in (ICON, FANART):
+            params[name] = value
+    if not params:
+        return target
+    return '%s%s%s' % (target, '&' if '?' in target else '?',
+                       urllib.parse.urlencode(params))
+
+
+def favorite_menu(title, query, art, info):
+    """Riga del menu contestuale: aggiungi o togli da La mia lista."""
+    name = progress.key(title)
+    if not name:
+        return []
+    params = {'mode': 'favorite', 'k': name, 't': title,
+              'u': query.get('u', ''), 'p': query.get('p', '')}
+    thumb = (art or {}).get('thumb')
+    fanart = (art or {}).get('fanart')
+    # L'icona generica non e' una copertina: meglio lasciarla fuori.
+    if thumb and thumb != ICON:
+        params['i'] = thumb
+    if fanart and fanart != FANART:
+        params['f'] = fanart
+    plot = (info or {}).get('plot')
+    if plot:
+        params['pl'] = plot
+    if favorites.has(title):
+        return [(t(30054), 'RunPlugin(%s)' % url(a='remove', **params))]
+    return [(t(30053), 'RunPlugin(%s)' % url(a='add', **params))]
+
+
 def entry_url(entry):
     params = {'mode': 'play', 'u': entry['url'],
               'title': playlist.clean_name(entry['name'])}
@@ -419,6 +467,7 @@ def choose_order(back='', groups=False, current=''):
 # Menu principale
 # --------------------------------------------------------------------------
 def show_root():
+    show_favorites_row()
     show_continue_row()
     if setting_bool('source_load', True):
         add_item(t(30011), url(mode='load'), art=source_art('load'),
@@ -467,6 +516,78 @@ def show_saved_lists():
 
 
 # --------------------------------------------------------------------------
+# La mia lista (preferiti)
+# --------------------------------------------------------------------------
+def show_favorites_row():
+    """Riga in cima al menu: le voci scelte."""
+    try:
+        rows = favorites.load()
+    except playlist_store.StoreError as exc:
+        log('la mia lista non letta: %s' % exc)
+        return
+    if not rows:
+        return
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30055), len(rows)),
+             url(mode='favorites'),
+             info={'plot': t(30059), 'mediatype': 'video'})
+
+
+def show_favorites():
+    """Le voci scelte, con la loro copertina e il loro link."""
+    try:
+        rows = favorites.load()
+    except playlist_store.StoreError as exc:
+        log('la mia lista non letta: %s' % exc)
+        rows = []
+    if not rows:
+        notify(t(30058))
+        end()
+        return
+
+    for row in rows:
+        title = row.get('title') or ''
+        params = {'mode': 'play', 'u': row.get('url') or '', 'title': title}
+        if row.get('extra'):
+            params['p'] = row['extra']
+        remove = (t(30054), 'RunPlugin(%s)' % url(
+            mode='favorite', k=row['key'], t=title, a='remove'))
+        info = {'title': title, 'plot': row.get('plot') or t(30059),
+                'mediatype': 'video'}
+        add_item(title, url(**params), art=row.get('art'), info=info,
+                 playable=True, context=[remove])
+    end('videos')
+
+
+def favorite_action():
+    """Aggiunge o toglie una voce da La mia lista, poi ridisegna la pagina."""
+    action = PARAMS.get('a', '')
+    title = PARAMS.get('t', '')
+    log('la mia lista %s: %s' % (action, title))
+    art = {}
+    if PARAMS.get('i'):
+        art['thumb'] = PARAMS['i']
+    if PARAMS.get('f'):
+        art['fanart'] = PARAMS['f']
+    try:
+        if action == 'add':
+            favorites.add(title, PARAMS.get('u', ''), PARAMS.get('p', ''),
+                          art, PARAMS.get('pl', ''))
+            notify(t(30056))
+        elif action == 'remove':
+            favorites.remove(title)
+            notify(t(30057))
+    except playlist_store.StoreError as exc:
+        log('la mia lista non aggiornata: %s' % exc)
+        notify(t(30015), True)
+
+    try:
+        xbmc.executebuiltin('Container.Refresh')
+    except Exception:
+        log('aggiornamento della pagina non disponibile')
+    end()
+
+
+# --------------------------------------------------------------------------
 # Continua a guardare
 # --------------------------------------------------------------------------
 def show_continue_row():
@@ -502,8 +623,8 @@ def show_continue():
             params['p'] = entry['extra']
         info = {'title': entry.get('title') or '', 'plot': t(30050),
                 'mediatype': 'video'}
-        add_item(entry.get('title') or '', url(**params), info=info,
-                 playable=True)
+        add_item(entry.get('title') or '', url(**params),
+                 art=entry.get('art') or {}, info=info, playable=True)
     end('videos')
 
 
@@ -1309,10 +1430,17 @@ def play(target, title='', extra=''):
     log('player scelto: %s | manifest: %s' % (chosen, manifest))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
     if title:
+        # Copertina arrivata col link: si salva con la posizione, cosi' la
+        # pagina Continua mostra il logo invece dell'icona generica.
+        art = {}
+        if PARAMS.get('at'):
+            art['thumb'] = PARAMS['at']
+        if PARAMS.get('af'):
+            art['fanart'] = PARAMS['af']
         # Il servizio in sottofondo segue la riproduzione e salva la posizione:
         # questa pagina puo' chiudersi subito, la posizione non si perde.
         try:
-            progress.begin(title, PARAMS.get('u') or source, extra, start)
+            progress.begin(title, PARAMS.get('u') or source, extra, start, art)
         except playlist_store.StoreError as exc:
             log('posizione non seguita: %s' % exc)
 
@@ -1359,6 +1487,10 @@ def main():
         show_tv_variants()
     elif mode == 'tv_refresh':
         refresh_tv()
+    elif mode == 'favorites':
+        show_favorites()
+    elif mode == 'favorite':
+        favorite_action()
     elif mode == 'continue':
         show_continue()
     elif mode == 'progress':

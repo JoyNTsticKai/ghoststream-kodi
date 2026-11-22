@@ -150,3 +150,31 @@ msgstr "visto"
 msgctxt "#30052"
 msgid "Segnato come non visto"
 msgstr "Segnato come non visto"
+
+msgctxt "#30053"
+msgid "Aggiungi a La mia lista"
+msgstr "Aggiungi a La mia lista"
+
+msgctxt "#30054"
+msgid "Togli da La mia lista"
+msgstr "Togli da La mia lista"
+
+msgctxt "#30055"
+msgid "La mia lista"
+msgstr "La mia lista"
+
+msgctxt "#30056"
+msgid "Aggiunto a La mia lista"
+msgstr "Aggiunto a La mia lista"
+
+msgctxt "#30057"
+msgid "Tolto da La mia lista"
+msgstr "Tolto da La mia lista"
+
+msgctxt "#30058"
+msgid "La mia lista e vuota: aggiungi una voce dal menu contestuale."
+msgstr "La mia lista e vuota: aggiungi una voce dal menu contestuale."
+
+msgctxt "#30059"
+msgid "Le voci che hai scelto, in cima al menu."
+msgstr "Le voci che hai scelto, in cima al menu."
