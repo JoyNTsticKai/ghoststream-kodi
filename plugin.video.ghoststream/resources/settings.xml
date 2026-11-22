@@ -18,7 +18,7 @@
   </category>
 
   <category label="Aggiornamenti">
-    <setting id="update_check" type="bool" label="All'apertura guarda se c'e' una versione nuova nel repository (una volta ogni 12 ore)" default="true"/>
+    <setting id="update_check" type="bool" label="All'apertura installa da solo la versione nuova dal repository (una volta ogni 12 ore)" default="true"/>
   </category>
 
   <category label="Liste e link">

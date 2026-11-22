@@ -182,8 +182,6 @@ LABELS = {
            'video si ferma dopo pochi secondi. La cache di Kodi e\' di %d MB: '
            'portarla a 256 MB aiuta. Vuoi che lo faccia ora?',
     30108: 'UFFICIALE',
-    30109: 'Nel repository c\'e la versione %s del Ghost (qui hai la %s). '
-           'La installo adesso?',
     30110: 'Aggiornamento avviato: %s. Al termine riapri l\'addon.',
 }
 
@@ -587,8 +585,8 @@ def check_update():
 
     Kodi aggiorna da solo solo se l'utente ha acceso "Aggiorna
     automaticamente" (e dopo il suo giro): qui si guarda all'apertura e, se
-    serve, si chiede. La risposta resta in update.json, cosi' non si aspetta
-    la rete a ogni clic.
+    c'e' una versione nuova, si installa senza domande. L'esito resta in
+    update.json, cosi' non si aspetta la rete a ogni clic.
     """
     if not setting_bool('update_check', True):
         return
@@ -607,8 +605,6 @@ def check_update():
         return
 
     log('aggiornamento disponibile: %s (installata %s)' % (remote, current))
-    if not confirm(t(30109) % (remote, current)):
-        return
     notify(t(30110) % remote)
     try:
         # Prima si rilegge l'elenco del repository, poi si installa da li'.

@@ -372,10 +372,6 @@ msgctxt "#30108"
 msgid "UFFICIALE"
 msgstr "UFFICIALE"
 
-msgctxt "#30109"
-msgid "Nel repository c'e la versione %s del Ghost (qui hai la %s). La installo adesso?"
-msgstr "Nel repository c'e la versione %s del Ghost (qui hai la %s). La installo adesso?"
-
 msgctxt "#30110"
 msgid "Aggiornamento avviato: %s. Al termine riapri l'addon."
 msgstr "Aggiornamento avviato: %s. Al termine riapri l'addon."

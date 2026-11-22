@@ -238,7 +238,7 @@ class Addon(object):
         return {
             'id': 'plugin.video.ghoststream',
             'name': 'Cartoni',
-            'version': '1.9.19',
+            'version': '1.9.20',
             'path': os.path.abspath('plugin.video.ghoststream'),
             'profile': PROFILE,
         }.get(key, '')
@@ -1342,10 +1342,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.19 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.19 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.20 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.20 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.19"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.20"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1439,7 +1439,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.19' in handle.read(), 'addon.xml 1.9.19 anche nel file appena letto')
+    check('1.9.20' in handle.read(), 'addon.xml 1.9.20 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1708,7 +1708,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.19' in manifest, 'addon.xml 1.9.19')
+check('1.9.20' in manifest, 'addon.xml 1.9.20')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -2174,10 +2174,10 @@ print('35) aggiornamento dal repository')
 xml = ('<?xml version="1.0"?>'
        '<addons><addon id="plugin.video.ghoststream" version="1.9.99"/>'
        '<addon id="repository.ghoststream" version="1.0.0"/></addons>')
-check(update.newer('1.9.99', '1.9.19') and update.newer('1.10', '1.9.99') and
-      not update.newer('1.9.9', '1.9.19'),
+check(update.newer('1.9.99', '1.9.20') and update.newer('1.10', '1.9.99') and
+      not update.newer('1.9.9', '1.9.20'),
       'il confronto e numerico, non alfabetico')
-check(update.parse('1.9.19') == (1, 9, 19) and update.parse('') == (),
+check(update.parse('1.9.20') == (1, 9, 20) and update.parse('') == (),
       'versione letta a pezzi')
 check(update.version_in(xml, 'plugin.video.ghoststream') == '1.9.99' and
       update.version_in('rotto', 'plugin.video.ghoststream') == '',
@@ -2187,21 +2187,12 @@ SETTINGS['update_check'] = 'true'
 update.fetch = lambda timeout=6: xml
 playlist_store.write_data(update.FILE, {})
 Dialog.ASKED = []
-Dialog.ANSWER = False
 run('')
-check(any('1.9.99' in message for message in Dialog.ASKED),
-      'all apertura propone la versione nuova: %s' % Dialog.ASKED)
-check(not any('InstallAddon' in command for command in BUILTINS),
-      'se dice no non installa niente')
-
-playlist_store.write_data(update.FILE, {})
-Dialog.ASKED = []
-Dialog.ANSWER = True
-run('')
+check(Dialog.ASKED == [], 'non chiede niente: aggiorna e basta')
 check(any('UpdateAddonRepos' == command for command in BUILTINS) and
       any('InstallAddon(plugin.video.ghoststream)' == command
           for command in BUILTINS),
-      'se dice si rilegge il repository e installa: %s' % BUILTINS)
+      'aggiorna da solo, senza domande: %s' % BUILTINS)
 
 
 def _niente(timeout=6):
