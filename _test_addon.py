@@ -104,11 +104,14 @@ class Dialog(object):
     ANSWER = False
     SELECT = -1
     OPTIONS = []
+    ASKED = []
 
     def notification(self, *args, **kwargs):
         pass
 
     def yesno(self, *args, **kwargs):
+        # La domanda sulla cache si ricorda: la prova guarda cosa e' stato chiesto.
+        Dialog.ASKED.append(args[-1] if args else '')
         return Dialog.ANSWER
 
     def select(self, heading, options, **kwargs):
@@ -126,6 +129,28 @@ xbmc.executebuiltin = lambda command, *args, **kwargs: BUILTINS.append(command)
 xbmc.sleep = lambda milliseconds: None
 xbmc.getSkinDir = lambda: 'skin.test'
 xbmc.getCondVisibility = (lambda condition: 'inputstream.adaptive' in condition)
+
+# Impostazioni finte di Kodi: la cache si legge e si scrive via JSON-RPC.
+CACHE = {'memorysize': 20, 'readfactor': 400, 'calls': [], 'fail': False}
+
+
+def executeJSONRPC(payload):
+    request = json.loads(payload)
+    params = request.get('params') or {}
+    CACHE['calls'].append(request.get('method'))
+    if CACHE['fail']:
+        raise ValueError('webserver spento')
+    key = params['setting'].split('.')[-1]
+    if request.get('method') == 'Settings.GetSettingValue':
+        return json.dumps({'result': {'value': CACHE[key]}})
+    if request.get('method') == 'Settings.SetSettingValue':
+        CACHE[key] = params['value']
+        CACHE['calls'].append('%s=%s' % (params['setting'], params['value']))
+        return json.dumps({'result': True})
+    return json.dumps({'result': None})
+
+
+xbmc.executeJSONRPC = executeJSONRPC
 
 # Riproduzione finta: il servizio la segue con track_step() e il player
 # risponde quello che gli si dice.
@@ -1303,10 +1328,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.11 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.11 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.12 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.12 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.11"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.12"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1400,7 +1425,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.11' in handle.read(), 'addon.xml 1.9.11 anche nel file appena letto')
+    check('1.9.12' in handle.read(), 'addon.xml 1.9.12 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1669,7 +1694,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.11' in manifest, 'addon.xml 1.9.11')
+check('1.9.12' in manifest, 'addon.xml 1.9.12')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1842,5 +1867,55 @@ check(pagina.read_alternates('') == [] and
           [{'url': 'a'}, {'url': 'b'}, {'url': 'c'}]))) == 2 and
       pagina.read_alternates('non json') == [],
       'le copie si fermano a due e i valori rotti si ignorano')
+
+print('31) cache bassa e puntata pesante')
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': [], 'fail': False})
+Dialog.ASKED = []
+Dialog.ANSWER = True
+RESOLVED[:] = []
+PLAYER.update({'playing': True, 'time': 5.0, 'total': 1480.0})
+run('?mode=play&u=http://example.com/01.mkv&title=Uno&heavy=1')
+print('   chiesto: %s' % Dialog.ASKED)
+check(len(Dialog.ASKED) == 1 and '20 MB' in Dialog.ASKED[0],
+      'chiede prima di toccare la cache')
+check(CACHE['memorysize'] == 256 and CACHE['readfactor'] == 0,
+      'cache a 256 MB e fattore Adattivo: %s' % CACHE)
+check('Settings.SetSettingValue' in CACHE['calls'] and
+      'filecache.readfactor=0' in CACHE['calls'],
+      'si impostano memoria e fattore di lettura')
+check(RESOLVED and RESOLVED[-1]['path'] == 'http://example.com/01.mkv',
+      'la puntata parte lo stesso')
+
+CACHE.update({'memorysize': 256, 'readfactor': 400, 'calls': []})
+Dialog.ASKED = []
+Dialog.ANSWER = True
+run('?mode=play&u=http://example.com/01.mkv&title=Due&heavy=1')
+check(Dialog.ASKED == [] and 'Settings.SetSettingValue' not in CACHE['calls'],
+      'con 256 MB non chiede e non cambia niente')
+
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': []})
+Dialog.ASKED = []
+Dialog.ANSWER = False
+run('?mode=play&u=http://example.com/01.mkv&title=Tre&heavy=1')
+check(len(Dialog.ASKED) == 1 and CACHE['memorysize'] == 20 and
+      'Settings.SetSettingValue' not in CACHE['calls'],
+      'se dice no la cache resta com e')
+
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': [], 'fail': True})
+Dialog.ASKED = []
+Dialog.ANSWER = True
+RESOLVED[:] = []
+run('?mode=play&u=http://example.com/01.mkv&title=Quattro&heavy=1')
+check(Dialog.ASKED == [] and RESOLVED and
+      RESOLVED[-1]['path'] == 'http://example.com/01.mkv',
+      'cache illeggibile: nessuna domanda, la puntata parte')
+CACHE['fail'] = False
+
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': []})
+Dialog.ASKED = []
+Dialog.ANSWER = True
+run('?mode=play&u=http://example.com/02.mp4&title=Leggera')
+check(Dialog.ASKED == [], 'una puntata leggera non chiede niente')
+Dialog.ANSWER = False
 
 print('ESITO OK')

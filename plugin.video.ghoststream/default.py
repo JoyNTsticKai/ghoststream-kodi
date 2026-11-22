@@ -166,6 +166,12 @@ LABELS = {
     30095: 'Questa puntata esiste solo in versione pesante (%s, circa %s Mbps): '
            'la sorgente puo\' non stare dietro al flusso. Se si blocca, alza la '
            'cache in Impostazioni > Servizi > Caching.',
+    30096: 'Questa puntata esiste solo in versione pesante. La cache di Kodi e\' '
+           'di %d MB: portarla a 256 MB aiuta a non farla bloccare. '
+           'Vuoi che lo faccia ora?',
+    30097: 'Cache di Kodi portata a 256 MB. Si cambia da Impostazioni > Servizi '
+           '> Caching.',
+    30098: 'Cache non modificata: si imposta da Impostazioni > Servizi > Caching.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -1181,8 +1187,10 @@ def show_archive_item(identifier):
                          ep=group['episode'], s=group['season'] or ''),
                      art=art, info=info)
         else:
-            add_item(label, url(mode='play', u=preferred['url'], title=title),
-                     art=art, info=info, playable=True)
+            params = {'mode': 'play', 'u': preferred['url'], 'title': title}
+            if preferred.get('heavy'):
+                params['heavy'] = '1'
+            add_item(label, url(**params), art=art, info=info, playable=True)
     end('episodes')
 
 
@@ -1217,7 +1225,10 @@ def show_archive_versions(identifier, episode, season=None):
         note = heavy_note(entry)
         if note:
             info['plot'] = '%s\n%s' % (info['plot'], note) if info['plot'] else note
-        add_item(label, url(mode='play', u=entry['url'], title=title),
+        params = {'mode': 'play', 'u': entry['url'], 'title': title}
+        if entry.get('heavy'):
+            params['heavy'] = '1'
+        add_item(label, url(**params),
                  art={'thumb': thumb, 'fanart': thumb}, info=info,
                  playable=True)
     end('episodes')
@@ -1812,6 +1823,61 @@ def apply_stream_props(item, target, extra):
     return target
 
 
+CACHE_ASK_BELOW = 256   # MB: sotto questa soglia una puntata pesante si blocca
+CACHE_TARGET = 256      # MB: quanto si propone di usare
+CACHE_READFACTOR = 0    # 'Adattivo' nelle impostazioni di Kodi 21
+
+
+def cache_size():
+    """Memoria della cache video di Kodi in MB (None se non risponde)."""
+    try:
+        reply = xbmc.executeJSONRPC(json.dumps({
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'Settings.GetSettingValue',
+            'params': {'setting': 'filecache.memorysize'},
+        }))
+        return int(json.loads(reply)['result']['value'])
+    except Exception as exc:
+        log('cache non leggibile: %s' % exc)
+        return None
+
+
+def raise_cache():
+    """Porta cache e fattore di lettura ai valori che reggono i flussi pesanti."""
+    good = True
+    for setting, value in (('filecache.memorysize', CACHE_TARGET),
+                           ('filecache.readfactor', CACHE_READFACTOR)):
+        try:
+            reply = xbmc.executeJSONRPC(json.dumps({
+                'jsonrpc': '2.0', 'id': 1,
+                'method': 'Settings.SetSettingValue',
+                'params': {'setting': setting, 'value': value},
+            }))
+            if not json.loads(reply).get('result'):
+                good = False
+        except Exception as exc:
+            log('cache non impostata (%s): %s' % (setting, exc))
+            good = False
+    return good
+
+
+def offer_cache():
+    """Chiede se alzare la cache prima di aprire una puntata pesante.
+
+    Si tocca una impostazione di Kodi solo dopo un si' esplicito: chi non
+    vuole cambiarla riproduce lo stesso, con l'avviso gia' nella trama.
+    """
+    size = cache_size()
+    if size is None or size >= CACHE_ASK_BELOW:
+        return
+    if not confirm(t(30096) % size):
+        return
+    if raise_cache():
+        notify(t(30097))
+        return
+    notify(t(30098), True)
+
+
 def read_alternates(raw):
     """Le copie alternative arrivate col link, solo quelle da provare."""
     if not raw:
@@ -1880,6 +1946,10 @@ def try_alternates(candidates, title, extra, art):
 
 def play(target, title='', extra=''):
     log('riproduco: %s' % target)
+    if PARAMS.get('heavy') == '1':
+        # Puntata che esiste solo in versione pesante: con la cache piccola
+        # il buffer si svuota a meta'. Si chiede, non si cambia da soli.
+        offer_cache()
     source = target
     item = xbmcgui.ListItem(path=target, offscreen=True)
     if title:
