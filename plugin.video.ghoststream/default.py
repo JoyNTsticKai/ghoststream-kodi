@@ -26,9 +26,9 @@ import xbmcplugin
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import (archive_api, diagnostica, dirette, favorites,
-                           hidden, local, naming, playlist, playlist_store,
-                           progress, search, status, tv, views, youtube)
+from resources.lib import (archive_api, diagnostica, favorites, hidden,
+                           local, naming, playlist, playlist_store, progress,
+                           search, status, tv, views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -172,9 +172,6 @@ LABELS = {
     30097: 'Cache di Kodi portata a 256 MB. Si cambia da Impostazioni > Servizi '
            '> Caching.',
     30098: 'Cache non modificata: si imposta da Impostazioni > Servizi > Caching.',
-    30100: 'Dirette ufficiali',
-    30101: 'I canali Rai in diretta dai flussi pubblici di RaiPlay, con il '
-           'programma in onda.',
     30102: 'Diagnostica',
     30103: 'Prova adesso le fonti e le impostazioni: cosa risponde e cosa no.',
     30104: 'ok',
@@ -597,8 +594,6 @@ def show_root():
     if setting_bool('source_tv', True):
         add_item(t(30032), url(mode='tv'), art=source_art('tv'),
                  info={'plot': t(30033), 'mediatype': 'video'})
-        add_item(t(30100), url(mode='dirette'), art=source_art('tv'),
-                 info={'plot': t(30101), 'mediatype': 'video'})
     if setting_bool('source_local', False):
         add_item(t(30002), url(mode='local', path=''), art=source_art('local'),
                  info={'plot': 'I tuoi file video, su disco o su NAS.',
@@ -1699,27 +1694,6 @@ def show_tv_variants():
     end('videos')
 
 
-def show_dirette():
-    """Dirette ufficiali Rai: flussi pubblici con il programma in onda.
-
-    I link sono quelli del relinker di RaiPlay (non si scarica niente): la
-    guida TV viene dalla stessa copia locale della sezione TV, quindi non
-    serve nessuna nuova fonte da configurare.
-    """
-    entries = dirette.entries()
-    try:
-        guide = tv.guide(setting_text('epg_url', ''))
-    except tv.TvError as exc:
-        log('guida TV non disponibile per le dirette: %s' % exc)
-        guide = {}
-    entries = tv.group_channels(tv.with_guide(entries, guide))
-    # Ordine del telecomando (Rai 1, Rai 2, Rai 3, Rai 4...) e nessuna riga
-    # "Ordine dei canali": qui l'ordine non e' una scelta.
-    show_entries(entries, page={'mode': 'dirette'}, order='number',
-                 order_row=False, track=False)
-    end('videos')
-
-
 # --------------------------------------------------------------------------
 # Diagnostica
 # --------------------------------------------------------------------------
@@ -2124,8 +2098,6 @@ def main():
         show_tv_variants()
     elif mode == 'tv_refresh':
         refresh_tv_and_guide(show_tv)
-    elif mode == 'dirette':
-        show_dirette()
     elif mode == 'diag':
         show_diagnostica()
     elif mode == 'diag_refresh':

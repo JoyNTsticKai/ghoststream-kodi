@@ -348,18 +348,6 @@ msgctxt "#30098"
 msgid "Cache non modificata: si imposta da Impostazioni > Servizi > Caching."
 msgstr "Cache non modificata: si imposta da Impostazioni > Servizi > Caching."
 
-msgctxt "#30100"
-msgid "Dirette ufficiali"
-msgstr "Dirette ufficiali"
-
-msgctxt "#30101"
-msgid ""
-"I canali Rai in diretta dai flussi pubblici di RaiPlay, con il programma in "
-"onda."
-msgstr ""
-"I canali Rai in diretta dai flussi pubblici di RaiPlay, con il programma in "
-"onda."
-
 msgctxt "#30102"
 msgid "Diagnostica"
 msgstr "Diagnostica"

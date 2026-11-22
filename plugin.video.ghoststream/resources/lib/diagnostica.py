@@ -67,15 +67,20 @@ def main_list():
 
 
 def guide():
-    """La guida TV: se la fonte non risponde conta la copia che si usa."""
+    """La guida TV: se la fonte non risponde la riga e' rossa lo stesso.
+
+    La copia vecchia si continua a usare, e lo si dice, ma non si colora di
+    verde una fonte muta: il verde qui vuol dire "risponde adesso".
+    """
     age = tv.cache_age(tv.GUIDE_CACHE)
     cached = ('copia di %s' % status.age_text(age) if age is not None
               else 'nessuna copia')
     ok, detail = source((tv.guide_sources() or [''])[0])
-    if not ok and age is not None:
-        return row('Guida TV', True, 'fonte non raggiungibile, uso la %s'
-                   % cached)
-    return row('Guida TV', ok, cached if ok else detail)
+    if ok:
+        return row('Guida TV', True, cached)
+    if age is not None:
+        return row('Guida TV', False, '%s, si usa la %s' % (detail, cached))
+    return row('Guida TV', False, detail)
 
 
 def channels_cached():

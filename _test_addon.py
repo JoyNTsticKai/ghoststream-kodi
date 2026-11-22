@@ -292,6 +292,12 @@ from resources.lib import (archive_api, diagnostica, dirette,  # noqa: E402
                            favorites, hidden, playlist, playlist_store,
                            progress, search, status, tv, views, youtube)
 
+# I canali ufficiali Rai stanno dentro la TV in chiaro: nelle prove con le
+# liste finte si spengono, e si riaccendono nella sezione 32, che prova la
+# fusione vera (ufficiale al posto delle copie morte).
+ufficiali_originale = tv.official_channels
+tv.official_channels = lambda: []
+
 
 def run(param=''):
     ITEMS[:] = []
@@ -1330,10 +1336,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.14 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.14 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.15 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.15 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.14"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.15"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1427,7 +1433,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.14' in handle.read(), 'addon.xml 1.9.14 anche nel file appena letto')
+    check('1.9.15' in handle.read(), 'addon.xml 1.9.15 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1696,7 +1702,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.14' in manifest, 'addon.xml 1.9.14')
+check('1.9.15' in manifest, 'addon.xml 1.9.15')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1965,7 +1971,7 @@ check('heavy=1' not in leggera['url'],
       'una puntata leggera non porta il segno pesante')
 Dialog.ANSWER = False
 
-print('32) dirette ufficiali Rai')
+print('32) canali ufficiali dentro la TV in chiaro')
 check(len(dirette.CHANNELS) == 10,
       'dieci canali ufficiali: %d' % len(dirette.CHANNELS))
 voci = dirette.entries()
@@ -1977,32 +1983,60 @@ numeri = [entry['number'] for entry in voci]
 check(numeri == sorted(numeri), 'numeri del telecomando in ordine: %s' % numeri)
 check(len(set(numeri)) == len(numeri), 'nessun numero doppio')
 
+morta = os.path.join(workdir, 'rai-morta.m3u')
+righe = [
+    '#EXTM3U',
+    '#EXTINF:-1 tvg-id="Rai1.it" group-title="Rai",Rai 1',
+    'http://example.com/rai1-morto.m3u8',
+    '#EXTINF:-1 group-title="Rai",Rai 1 HD (1080p)',
+    'http://example.com/rai1-hd-morto.m3u8',
+    '#EXTINF:-1 group-title="Rai",Rai 2',
+    'http://example.com/rai2-morto.m3u8',
+    '#EXTINF:-1 group-title="Altri",Canale Qualunque',
+    'http://example.com/qualunque.m3u8',
+]
+with open(morta, 'w', encoding='utf-8') as handle:
+    handle.write(chr(10).join(righe) + chr(10))
+
+# Da qui in poi i canali ufficiali valgono come dentro Kodi.
+tv.official_channels = ufficiali_originale
 adesso = int(time.time())
 tv.guide = lambda url='', force=False: {
     'aliases': {},
     'programmes': {'rai1': [[adesso - 600, adesso + 600, 'Uno Mattina']]},
 }
+canali = tv.group_channels(tv.channels(morta, force=True))
+print('   canali: %s' % [entry['name'] for entry in canali])
+rai1 = [entry for entry in canali if entry['name'].startswith('Rai 1')]
+check(len(rai1) == 1, 'Rai 1 una volta sola in elenco')
+check(len(rai1[0]['variants']) == 1,
+      'con il solo flusso ufficiale, senza le copie morte')
+check('relinkerServlet' in rai1[0]['url'],
+      'e il flusso e quello ufficiale RaiPlay')
+check(all('morto' not in copia['url'] for copia in rai1[0]['variants']),
+      'nessuna copia morta resta attaccata al canale')
+check(any(entry['name'] == 'Canale Qualunque' for entry in canali),
+      'gli altri canali della lista restano al loro posto')
+check(canali[0]['name'] == 'Rai 1', 'Rai 1 apre l elenco, come sul telecomando')
+
 SETTINGS['source_tv'] = 'true'
+SETTINGS['tv_url'] = morta
 run('')
-check('Dirette ufficiali' in [item['label'] for item in ITEMS],
-      'voce Dirette ufficiali nel menu principale')
-run('?mode=dirette')
+check('Dirette ufficiali' not in [item['label'] for item in ITEMS],
+      'nessuna riga separata per le dirette: stanno nella TV in chiaro')
+run('?mode=tv')
 labels = [item['label'] for item in ITEMS]
-print('   dirette: %s' % labels)
-check(len(ITEMS) == 10, 'dieci dirette in elenco: %d' % len(ITEMS))
-check(labels[0].startswith('Rai 1') and labels[-1].startswith('Rai Sport'),
-      'ordine del telecomando, dalla prima all ultima: %s' % labels[-1])
-check('In onda:' in labels[0] and 'Uno Mattina' in labels[0],
-      'la guida si vede anche sulle dirette')
-check('relinkerServlet' in urllib.parse.unquote(ITEMS[0]['url']) and
-      'manifest_type' in urllib.parse.unquote(ITEMS[0]['url']),
-      'la voce porta il link ufficiale e il tipo di manifest')
-check(ITEMS[0]['folder'] is False, 'una diretta si apre subito')
-run('?' + urllib.parse.urlparse(ITEMS[0]['url']).query)
+check(sum(1 for label in labels if label.startswith('Rai 1')) == 1,
+      'una sola Rai 1 anche nella pagina TV: %s' % labels)
+riga = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+check('In onda:' in riga['label'] and 'Uno Mattina' in riga['label'],
+      'con il programma in onda dalla guida')
+check('relinkerServlet' in urllib.parse.unquote(riga['url']),
+      'la riga riproduce il flusso ufficiale')
+run('?' + urllib.parse.urlparse(riga['url']).query)
 check(RESOLVED[-1]['props'].get('inputstream') == 'inputstream.adaptive' and
       RESOLVED[-1]['props'].get('inputstream.adaptive.manifest_type') == 'hls',
-      'la diretta va a inputstream.adaptive, non al demuxer: %s'
-      % RESOLVED[-1]['props'])
+      'e va a inputstream.adaptive, non al demuxer: %s' % RESOLVED[-1]['props'])
 
 print('33) diagnostica')
 reach_orig = diagnostica.reach
@@ -2050,6 +2084,17 @@ archive_api.search = broken_search
 run('?mode=diag')
 check(any('Internet Archive: [COLOR=red]ko' in item['label'] for item in ITEMS),
       'se una fonte non risponde la riga diventa rossa')
+
+diagnostica.reach = lambda url, headers=None: (False, 'rete assente')
+run('?mode=diag')
+labels = [item['label'] for item in ITEMS]
+print('   controlli senza rete: %s' % labels)
+check(any(label.startswith('Guida TV: [COLOR=red]ko') for label in labels),
+      'una fonte muta non e mai verde')
+check(any('si usa la copia' in label for label in labels),
+      'e si dice che si sta usando la copia salvata')
+check(any(label.startswith('Dirette ufficiali Rai: [COLOR=red]ko')
+          for label in labels), 'anche le dirette ufficiali segnano ko')
 
 run('?mode=diag_refresh')
 check(any('mode=diag' in command for command in BUILTINS),

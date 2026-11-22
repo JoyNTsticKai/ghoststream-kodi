@@ -24,7 +24,7 @@ import time
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from resources.lib import playlist, playlist_store
+from resources.lib import dirette, playlist, playlist_store
 
 LIST_URL = 'https://iptv-org.github.io/iptv/countries/it.m3u'
 # Prima le guide dei nazionali, poi quella che copre Sky e le altre pay TV.
@@ -107,7 +107,7 @@ def channels(url='', force=False):
     fresh = (list(cache.get('urls') or []) == urls and
              time.time() - (cache.get('fetched') or 0) < CHANNELS_MAX_AGE)
     if entries and fresh and not force:
-        return sort_channels(list(entries) + custom_channels(entries))
+        return sort_channels(_with_official(list(entries)))
     found = []
     errors = []
     seen = set()
@@ -128,7 +128,7 @@ def channels(url='', force=False):
             found.append(entry)
     if not found:
         if entries:
-            return sort_channels(list(entries) + custom_channels(entries))
+            return sort_channels(_with_official(list(entries)))
         raise TvError('lista canali non leggibile: %s'
                       % ('; '.join(errors) or 'nessuna fonte'))
     try:
@@ -136,7 +136,7 @@ def channels(url='', force=False):
             'urls': urls, 'fetched': int(time.time()), 'entries': found})
     except playlist_store.StoreError:
         pass
-    return sort_channels(found + custom_channels(found))
+    return sort_channels(_with_official(found))
 
 
 def builtin_sources():
@@ -220,6 +220,29 @@ def custom_channels(existing=()):
                         'logo': str(item.get('logo') or ''),
                         'group': str(item.get('group') or '')})
     return entries
+
+
+def official_channels():
+    """Canali in diretta che viaggiano con l'addon (i flussi RaiPlay).
+
+    Non si scaricano da nessuna lista: il link e' quello pubblico del
+    relinker, che all'apertura restituisce il flusso valido in quel momento.
+    """
+    return dirette.entries()
+
+
+def _with_official(entries):
+    """Ufficiali per primi, poi le liste senza i canali che coprono gia'.
+
+    Le liste pubbliche tengono ancora gli indirizzi morti degli stessi
+    canali: scartando le voci con la stessa chiave, Rai 1 compare una volta
+    sola e quella che si apre funziona.
+    """
+    official = official_channels()
+    keys = {channel_key(plain_name(entry.get('name'))) for entry in official}
+    rest = [entry for entry in entries or ()
+            if channel_key(plain_name(entry.get('name'))) not in keys]
+    return official + rest + custom_channels(entries)
 
 
 def merge_guides(parts):
