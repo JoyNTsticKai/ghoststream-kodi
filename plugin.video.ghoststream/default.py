@@ -212,6 +212,16 @@ def t(string_id):
     return text or LABELS.get(string_id, '')
 
 
+def info_row(message, target, plot=''):
+    """Una riga che spiega, invece di una pagina vuota dove non si capisce nulla.
+
+    Serve quando la pagina resterebbe senza voci: dopo aver rimesso a posto
+    l'ultimo nascosto, tolto l'ultimo preferito o finito l'ultimo video.
+    """
+    add_item(message, target, info={'plot': plot or message,
+                                    'mediatype': 'video'})
+
+
 def notify(message, error=False):
     icon = xbmcgui.NOTIFICATION_ERROR if error else xbmcgui.NOTIFICATION_INFO
     try:
@@ -618,14 +628,20 @@ def show_status():
         label = '%s: %s' % (t(30085), t(30087))
     add_item(label, page, info={'plot': t(30082), 'mediatype': 'video'})
 
-    add_item(t(30086), url(mode='status_refresh'), art=source_art('tv'),
+    add_item(t(30086), url(mode='status_refresh', v=int(time.time() * 1000)),
+             art=source_art('tv'),
              info={'plot': 'Riscarica canali e guida adesso.',
                    'mediatype': 'video'})
     end('videos')
 
 
-def refresh_status():
-    """Rinnova canali e guida adesso e torna alla pagina Stato."""
+def refresh_tv_and_guide(show):
+    """Riscarica canali e guida, poi ridisegna la pagina che l'ha chiesto.
+
+    Il ridisegno si fa qui e non rimandando a un'altra cartella con
+    Container.Update: quel passaggio lasciava l'utente su una pagina di
+    servizio vuota quando l'aggiornamento non veniva preso.
+    """
     ok = True
     try:
         tv.channels(setting_text('tv_url', ''), force=True)
@@ -638,7 +654,7 @@ def refresh_status():
         log('guida TV non aggiornata: %s' % exc)
         ok = False
     notify(t(30023) if ok else t(30024), not ok)
-    redirect(url(mode='status'))
+    show()
 
 
 # --------------------------------------------------------------------------
@@ -808,8 +824,8 @@ def show_hidden():
         log('voci nascoste non lette: %s' % exc)
         rows = []
     if not rows:
-        notify(t(30066))
-        end()
+        info_row(t(30066), url(mode='hidden'))
+        end('videos')
         return
 
     for row in rows:
@@ -869,8 +885,8 @@ def show_favorites():
         log('la mia lista non letta: %s' % exc)
         rows = []
     if not rows:
-        notify(t(30058))
-        end()
+        info_row(t(30058), url(mode='favorites'))
+        end('videos')
         return
 
     for row in rows:
@@ -940,8 +956,8 @@ def show_continue():
         log('posizioni non lette: %s' % exc)
         rows = []
     if not rows:
-        notify(t(30044))
-        end()
+        info_row(t(30044), url(mode='continue'))
+        end('videos')
         return
 
     for entry in rows:
@@ -1510,8 +1526,8 @@ def show_tv():
     if group is not None:
         entries = playlist.in_group(entries, None if group == '*' else group)
         if not entries:
-            notify(t(30035))
-            end()
+            info_row(t(30035), url(mode='tv'))
+            end('videos')
             return
 
     only = 'epg' if PARAMS.get('only') == 'epg' else ''
@@ -1547,7 +1563,10 @@ def show_tv():
 
     # La TV segue l'ordine del telecomando (tv.channels lo ha gia' messo in
     # fila): niente riga "Ordine dei canali", che ripartirebbe dall'alfabetico.
-    show_entries(entries, refresh_target=url(mode='tv_refresh'),
+    # Il numero nell'indirizzo cambia a ogni pagina: cosi' "Aggiorna la lista"
+    # esegue sempre il rinnovo vero e non ripesca una cartella in cache.
+    show_entries(entries, refresh_target=url(mode='tv_refresh',
+                                             v=int(time.time() * 1000)),
                  page=page, group=group, extra_rows=extra, order='file',
                  order_row=False, track=False)
     end('videos')
@@ -1596,21 +1615,6 @@ def show_tv_variants():
                  playable=True, second=second, track=False)
     end('videos')
 
-
-def refresh_tv():
-    """Riscarica elenco canali e guida, poi torna alla sezione."""
-    ok = True
-    try:
-        tv.channels(setting_text('tv_url', ''), force=True)
-    except tv.TvError as exc:
-        log('canali TV non aggiornati: %s' % exc)
-        ok = False
-    try:
-        tv.guide(setting_text('epg_url', ''), force=True)
-    except tv.TvError as exc:
-        log('guida TV non aggiornata: %s' % exc)
-    notify(t(30023) if ok else t(30024), not ok)
-    redirect(url(mode='tv'))
 
 
 # --------------------------------------------------------------------------
@@ -1830,7 +1834,7 @@ def main():
     elif mode == 'tv_var':
         show_tv_variants()
     elif mode == 'tv_refresh':
-        refresh_tv()
+        refresh_tv_and_guide(show_tv)
     elif mode == 'favorites':
         show_favorites()
     elif mode == 'favorite':
@@ -1844,7 +1848,7 @@ def main():
     elif mode == 'status':
         show_status()
     elif mode == 'status_refresh':
-        refresh_status()
+        refresh_tv_and_guide(show_status)
     elif mode == 'search':
         show_search()
     elif mode == 'search_results':

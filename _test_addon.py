@@ -1275,10 +1275,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.8 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.8 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.9 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.9 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.8"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.9"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1372,7 +1372,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.8' in handle.read(), 'addon.xml 1.9.8 anche nel file appena letto')
+    check('1.9.9' in handle.read(), 'addon.xml 1.9.9 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1641,7 +1641,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.8' in manifest, 'addon.xml 1.9.8')
+check('1.9.9' in manifest, 'addon.xml 1.9.9')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1696,8 +1696,19 @@ tv.guide = lambda url='', force=False: (chiamate.append(('guida', force)), {})[1
 run('?mode=status_refresh')
 check(chiamate == [('canali', True), ('guida', True)],
       'Rinnova ora forza canali e guida: %s' % chiamate)
-check(any('mode=status' in command for command in BUILTINS),
-      'e torna alla pagina Stato')
+check(len(ITEMS) == 4 and ITEMS[0]['label'].startswith('Canali TV'),
+      'e ridisegna la pagina Stato, senza passare da una pagina vuota')
+check(not any('Container.Update' in command for command in BUILTINS),
+      'niente rimandi altrove: la pagina si costruisce qui: %s' % BUILTINS)
+
+chiamate[:] = []
+run('?mode=tv_refresh')
+check(chiamate[:2] == [('canali', True), ('guida', True)] and len(chiamate) == 4,
+      'Aggiorna la lista rinnova e poi ridisegna la TV: %s' % chiamate)
+check(not any('Container.Update' in command for command in BUILTINS),
+      'e anche qui niente pagina di servizio vuota: %s' % BUILTINS)
+check('mode=tv_refresh' in ITEMS[-1]['url'] and 'v=' in ITEMS[-1]['url'],
+      'la riga Aggiorna porta un numero nuovo, cosi non ripesca la cache')
 
 playlist_store.write_data('service.json', {})
 service.refresh()
@@ -1720,5 +1731,24 @@ check(any(item['label'] == 'Stato' for item in ITEMS),
       'Stato raggiungibile dal menu principale')
 check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'status.py')),
       'il modulo Stato viaggia con l addon')
+
+for riga in favorites.load():
+    favorites.remove(riga['title'])
+hidden.clear()
+playlist_store.write_data('progress.json', {'items': {}, 'now': {}})
+progress.reset()
+run('?mode=favorites')
+check(len(ITEMS) == 1 and 'vuota' in ITEMS[0]['label'] and
+      'mode=favorites' in ITEMS[0]['url'],
+      'La mia lista vuota lo dice, invece di restare bianca: %s'
+      % [item['label'] for item in ITEMS])
+run('?mode=continue')
+check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Niente da riprendere'),
+      'Continua vuoto lo dice')
+run('?mode=hidden')
+check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Niente di nascosto'),
+      'Voci nascoste vuota lo dice')
+check(all('v=' in item['url'] or 'mode=' in item['url'] for item in ITEMS),
+      'la riga riapre la stessa pagina')
 
 print('ESITO OK')
