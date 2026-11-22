@@ -1336,10 +1336,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.16 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.16 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.17 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.17 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.16"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.17"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1433,7 +1433,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.16' in handle.read(), 'addon.xml 1.9.16 anche nel file appena letto')
+    check('1.9.17' in handle.read(), 'addon.xml 1.9.17 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1702,7 +1702,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.16' in manifest, 'addon.xml 1.9.16')
+check('1.9.17' in manifest, 'addon.xml 1.9.17')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1924,6 +1924,24 @@ Dialog.ASKED = []
 Dialog.ANSWER = True
 run('?mode=play&u=http://example.com/02.mp4&title=Leggera')
 check(Dialog.ASKED == [], 'una puntata leggera non chiede niente')
+
+# Internet Archive serve a volte piano: anche un file leggero si blocca se la
+# cache e' piccola, quindi la domanda arriva lo stesso.
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': []})
+Dialog.ASKED = []
+Dialog.ANSWER = True
+RESOLVED[:] = []
+run('?mode=play&u=https://archive.org/download/finto/01.mp4&title=Archivio')
+check(len(Dialog.ASKED) == 1 and 'Internet Archive' in Dialog.ASKED[0],
+      'un file di Internet Archive chiede la cache anche se e leggero')
+check(CACHE['memorysize'] == 256, 'cache alzata per Internet Archive: %s' % CACHE)
+check(RESOLVED and RESOLVED[-1]['path'].startswith('https://archive.org/'),
+      'il file di Internet Archive parte lo stesso')
+
+CACHE.update({'memorysize': 256, 'readfactor': 0, 'calls': []})
+Dialog.ASKED = []
+run('?mode=play&u=https://archive.org/download/finto/02.mp4&title=Archivio2')
+check(Dialog.ASKED == [], 'con la cache gia a 256 MB non chiede')
 
 # Il segno pesante viaggia con la posizione salvata e con i preferiti.
 CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': [], 'fail': False})

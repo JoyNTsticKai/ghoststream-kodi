@@ -15,7 +15,7 @@ SEARCH_URL = 'https://archive.org/advancedsearch.php'
 METADATA_URL = 'https://archive.org/metadata/%s'
 DOWNLOAD_URL = 'https://archive.org/download/%s/%s'
 THUMB_URL = 'https://archive.org/services/img/%s'
-USER_AGENT = 'plugin.video.ghoststream/1.9.16 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.9.17 (Kodi addon)'
 
 VIDEO_EXTENSIONS = ('.mp4', '.m4v', '.webm', '.mkv', '.ogv', '.m3u8')
 

@@ -177,6 +177,9 @@ LABELS = {
     30104: 'ok',
     30105: 'ko',
     30106: 'Riprova',
+    30107: 'Internet Archive a volte serve piano: con la cache piccola il '
+           'video si ferma dopo pochi secondi. La cache di Kodi e\' di %d MB: '
+           'portarla a 256 MB aiuta. Vuoi che lo faccia ora?',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -1928,16 +1931,19 @@ def raise_cache():
     return good
 
 
-def offer_cache():
-    """Chiede se alzare la cache prima di aprire una puntata pesante.
+def offer_cache(archive=False):
+    """Chiede se alzare la cache prima di aprire una puntata che puo' bloccarsi.
 
     Si tocca una impostazione di Kodi solo dopo un si' esplicito: chi non
     vuole cambiarla riproduce lo stesso, con l'avviso gia' nella trama.
+    Internet Archive a volte serve piu' piano del bitrate del file: anche una
+    puntata leggera si ferma quando la cache e' piccola, quindi si chiede
+    anche per lei.
     """
     size = cache_size()
     if size is None or size >= CACHE_ASK_BELOW:
         return
-    if not confirm(t(30096) % size):
+    if not confirm((t(30107) if archive else t(30096)) % size):
         return
     if raise_cache():
         notify(t(30097))
@@ -2011,13 +2017,23 @@ def try_alternates(candidates, title, extra, art, heavy=False):
             return
 
 
+def archive_link(target):
+    """True per un file di Internet Archive: quella fonte a volte va piano."""
+    try:
+        host = (urllib.parse.urlparse(target).hostname or '').lower()
+    except ValueError:
+        return False
+    return host == 'archive.org' or host.endswith('.archive.org')
+
+
 def play(target, title='', extra=''):
     log('riproduco: %s' % target)
     heavy = PARAMS.get('heavy') == '1'
-    if heavy:
-        # Puntata che esiste solo in versione pesante: con la cache piccola
-        # il buffer si svuota a meta'. Si chiede, non si cambia da soli.
-        offer_cache()
+    if heavy or archive_link(target):
+        # Puntata pesante, oppure file di Internet Archive: la fonte pubblica
+        # puo' servire piano, e con la cache piccola il buffer si svuota a
+        # meta'. Si chiede, non si cambia da soli.
+        offer_cache(archive=not heavy)
     source = target
     item = xbmcgui.ListItem(path=target, offscreen=True)
     if title:
