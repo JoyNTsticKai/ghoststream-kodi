@@ -127,6 +127,37 @@ xbmc.sleep = lambda milliseconds: None
 xbmc.getSkinDir = lambda: 'skin.test'
 xbmc.getCondVisibility = (lambda condition: 'inputstream.adaptive' in condition)
 
+# Riproduzione finta: il servizio la segue con track_step() e il player
+# risponde quello che gli si dice.
+PLAYER = {'playing': False, 'time': 0.0, 'total': 0.0, 'seek': []}
+
+
+class Player(object):
+    def isPlaying(self):
+        return PLAYER['playing']
+
+    def getTime(self):
+        return PLAYER['time']
+
+    def getTotalTime(self):
+        return PLAYER['total']
+
+    def seekTime(self, seconds):
+        PLAYER['seek'].append(seconds)
+        PLAYER['time'] = float(seconds)
+
+
+class Monitor(object):
+    def abortRequested(self):
+        return False
+
+    def waitForAbort(self, seconds=None):
+        return False
+
+
+xbmc.Player = Player
+xbmc.Monitor = Monitor
+
 xbmcgui = types.ModuleType('xbmcgui')
 xbmcgui.ListItem = ListItem
 xbmcgui.Dialog = Dialog
@@ -224,8 +255,8 @@ sys.modules['xbmcvfs'] = xbmcvfs
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
-from resources.lib import (archive_api, playlist, playlist_store, tv,  # noqa: E402
-                           views)
+from resources.lib import (archive_api, playlist, playlist_store,  # noqa: E402
+                           progress, tv, views)
 
 
 def run(param=''):
@@ -1114,5 +1145,138 @@ check('xbmc.service' in manifest and 'library="service.py"' in manifest,
       'il servizio e dichiarato nell addon.xml')
 check(os.path.isfile(os.path.join(addon_dir, 'service.py')),
       'il file del servizio viaggia nello zip')
+
+print('24) posizioni salvate: Continua a guardare e segno di visto')
+check(progress.key('Ken  il Guerriero - Ep 1') ==
+      progress.key('ken il guerriero - ep 1'),
+      'la chiave del titolo ignora maiuscole e spazi doppi')
+check(progress.key('') == '', 'titolo vuoto: nessuna chiave')
+check([progress.time_text(0), progress.time_text(65), progress.time_text(3725)]
+      == ['0:00', '1:05', '1:02:05'], 'posizione leggibile (m:ss e h:mm:ss)')
+
+check(progress.store('Diretta', 'http://example.com/live.m3u8', '', 300, 0) is None and
+      progress.find('Diretta') is None,
+      'una diretta (durata sconosciuta) non finisce in Continua')
+
+voce = progress.store('Ken - Ep 1', 'http://example.com/01.mp4', '', 120, 1400)
+check(voce['position'] == 120 and not voce['finished'],
+      'posizione salvata a meta video')
+check(progress.resume('Ken - Ep 1') == 120, 'si riprende dal secondo salvato')
+check(progress.store('Ken - Ep 2', 'http://example.com/02.mp4', '', 10, 1400) and
+      progress.resume('Ken - Ep 2') == 0,
+      'pochi secondi non meritano una riga Riprendi')
+check(progress.store('Ken - Ep 3', 'http://example.com/03.mp4', '', 1395, 1400)['finished'],
+      'oltre il 90% il video e visto')
+check(progress.store('Ken - Ep 9', 'http://example.com/09.mp4', '', 1350, 1400)['finished'],
+      'la coda del video (meno di 90 secondi) conta come vista')
+check(progress.watched('Ken - Ep 3') and progress.resume('Ken - Ep 3') == 0,
+      'un video visto non si riprende')
+check([riga['title'] for riga in progress.continued()] == ['Ken - Ep 1'],
+      'in Continua solo quello lasciato a meta: %s' % progress.continued())
+
+ripresa = os.path.join(workdir, 'ripresa.m3u')
+with open(ripresa, 'w', encoding='utf-8') as handle:
+    handle.write('#EXTM3U\n#EXTINF:-1,Ken - Ep 1\nhttp://example.com/01.mp4\n')
+    handle.write('#EXTINF:-1,Ken - Ep 3\nhttp://example.com/03.mp4\n')
+SETTINGS['source_load'] = 'true'
+SETTINGS['source_youtube'] = 'false'
+SETTINGS['source_archive'] = 'false'
+SETTINGS['source_local'] = 'false'
+SETTINGS['source_tv'] = 'false'
+playlist_store.save_order('az')
+Dialog.ANSWER = False
+Keyboard.QUEUE = [ripresa]
+run('?mode=load')
+run('?mode=loaded')
+print('   voci: %s' % [item['label'] for item in ITEMS])
+a_meta = [item for item in ITEMS if 'Ep 1' in item['label']][0]
+visto = [item for item in ITEMS if 'Ep 3' in item['label']][0]
+check('Riprendi da 2:00' in a_meta['label'],
+      'la voce a meta dice da dove riparte: %s' % a_meta['label'])
+check('(visto)' in visto['label'] and visto['info'].get('playcount') == 1,
+      'la voce vista ha il segno: %s' % visto['label'])
+check(any('a=watch' in riga[1] for riga in a_meta['context']),
+      'menu contestuale: segna come visto')
+check(any('a=unwatch' in riga[1] for riga in visto['context']),
+      'menu contestuale: segna come non visto su una voce vista')
+check(all('mode=progress' in riga[1] for riga in a_meta['context']),
+      'le azioni sulle posizioni passano dal modo progress')
+
+run('')
+print('   menu: %s' % [item['label'] for item in ITEMS])
+check(ITEMS[0]['label'].startswith('Continua a guardare') and
+      'mode=continue' in ITEMS[0]['url'],
+      'riga Continua in cima al menu principale: %s' % ITEMS[0]['label'])
+check('(1)' in ITEMS[0]['label'], 'la riga dice quanti video aspettano')
+
+run('?mode=continue')
+check(len(ITEMS) == 1 and 'Riprendi da 2:00' in ITEMS[0]['label'] and
+      ITEMS[0]['folder'] is False,
+      'la pagina Continua mostra la posizione: %s' % [i['label'] for i in ITEMS])
+query = urllib.parse.urlparse(ITEMS[0]['url']).query
+PLAYER.update({'playing': True, 'time': 200.0, 'total': 1400.0, 'seek': []})
+run('?' + query)
+check(RESOLVED[-1]['props'].get('StartOffset') == '120',
+      'Kodi riceve StartOffset dal secondo salvato')
+check(progress.now().get('title') == 'Ken - Ep 1',
+      'il servizio sa quale titolo sta seguendo')
+check(progress.track_step(Player()) == 'play' and
+      progress.find('Ken - Ep 1')['position'] == 200.0,
+      'il servizio salva la posizione durante la riproduzione')
+PLAYER.update({'playing': True, 'time': 200.0, 'total': 1400.0, 'seek': []})
+progress.track_step(Player())
+check(progress.find('Ken - Ep 1')['position'] == 200.0,
+      'se la posizione non e avanzata non si riscrive il file')
+PLAYER.update({'playing': True, 'time': 0.0, 'total': 1400.0, 'seek': []})
+progress.reset()
+progress.begin('Ken - Ep 1', 'http://example.com/01.mp4', '', 120)
+progress.track_step(Player())
+check(PLAYER['seek'] == [120],
+      'se Kodi ignora StartOffset il servizio sposta al secondo giusto')
+PLAYER.update({'playing': False, 'time': 0.0, 'total': 0.0})
+check(progress.track_step(Player()) == 'stop' and progress.now() == {},
+      'a riproduzione fermata il segno in corso viene tolto')
+check(progress.resume('Ken - Ep 1') == 200, 'la posizione resta quella salvata')
+
+
+def progress_call(nome, azione, titolo):
+    return '?mode=progress&a=%s&k=%s&t=%s' % (
+        azione, nome, urllib.parse.quote(titolo))
+
+
+run(progress_call(progress.key('Ken - Ep 3'), 'unwatch', 'Ken - Ep 3'))
+check(not progress.watched('Ken - Ep 3'),
+      'segna come non visto rimette la voce tra quelle da riprendere')
+check(any('Container.Refresh' in command for command in BUILTINS),
+      'dopo il segno la pagina aperta si ridisegna')
+
+run(progress_call(progress.key('Ken - Ep 3'), 'forget', 'Ken - Ep 3'))
+check(progress.find('Ken - Ep 3') is None, 'togli da Continua cancella la voce')
+
+run(progress_call(progress.key('Ken - Ep 5'), 'watch', 'Ken - Ep 5'))
+check(progress.watched('Ken - Ep 5'),
+      'segna come visto funziona anche senza aver mai riprodotto')
+
+check(os.path.isfile(os.path.join(PROFILE_ROOT, 'progress.json')),
+      'le posizioni stanno nella cartella dati, non nei setting')
+
+playlist_store.write_data('progress.json', {'items': {
+    'vecchia': {'title': 'Vecchia', 'url': 'http://example.com/x.mp4',
+                'position': 100, 'total': 600, 'finished': False,
+                'updated': 1}}})
+progress.reset()
+progress.store('Ken - Ep 7', 'http://example.com/07.mp4', '', 100, 1400)
+progress.reset()
+check(progress.get('vecchia') is None,
+      'le posizioni di due mesi fa vengono scartate')
+
+check(playlist.USER_AGENT.endswith('1.9.3 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.3 (Kodi addon)'),
+      'versione e User-Agent allineati')
+check('version="1.9.3"' in manifest, 'addon.xml alla stessa versione')
+with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
+    servizio = handle.read()
+check('progress.track_step' in servizio and 'threading' in servizio,
+      'il servizio segue la riproduzione in un filo suo')
 
 print('ESITO OK')

@@ -27,7 +27,7 @@ import xbmcaddon
 import xbmcvfs
 
 from resources.lib import (archive_api, local, naming, playlist,
-                           playlist_store, tv, views, youtube)
+                           playlist_store, progress, tv, views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -108,6 +108,17 @@ LABELS = {
     30039: 'Dopo',
     30040: 'Guida TV non disponibile: premi "Aggiorna la lista" per riprovare.',
     30041: 'Principale',
+    30042: 'Riprendi da',
+    30043: 'Continua a guardare',
+    30044: 'Niente da riprendere: i video lasciati a meta compaiono qui.',
+    30045: 'Segna come visto',
+    30046: 'Segna come non visto',
+    30047: 'Togli da Continua',
+    30048: 'Segnato come visto',
+    30049: 'Tolto da Continua',
+    30050: 'Riprendi i video da dove li avevi lasciati.',
+    30051: 'visto',
+    30052: 'Segnato come non visto',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -204,7 +215,28 @@ def source_art(name):
 
 
 def add_item(label, target, art=None, info=None, playable=False, context=None,
-             second=None):
+             second=None, track=True):
+    """Una voce di elenco, con il segno di visto e 'Riprendi da' se ci sono.
+
+    La posizione si cerca col titolo che la riproduzione ricevera' (il
+    parametro title dello stesso link), cosi' lettura e salvataggio non possono
+    riferirsi a due titoli diversi.
+    """
+    info = dict(info or {})
+    query = play_params(target) if (playable and track) else {}
+    title = query.get('title', '') if query.get('mode') == 'play' else ''
+    marker = progress.find(title) if title else None
+    if marker and marker.get('finished'):
+        info['playcount'] = 1
+        label = '%s  [COLOR=green](%s)[/COLOR]' % (label, t(30051))
+    elif marker:
+        # Ancora a meta: si dice da dove riparte, senza togliere altro.
+        info['playcount'] = 0
+        label = '%s  [COLOR=grey]%s %s[/COLOR]' % (
+            label, t(30042), progress.time_text(marker.get('position')))
+    if title:
+        context = list(context or []) + progress_menu(title, marker, query)
+
     item = xbmcgui.ListItem(label=label, offscreen=True)
     if second:
         # Seconda riga della voce: in Kodi e' label2, quella sotto il nome.
@@ -303,8 +335,36 @@ def entry_extra(entry):
     return json.dumps(extra, separators=(',', ':')) if extra else ''
 
 
+def play_params(target):
+    """Parametri di una voce riproducibile (titolo, link, proprieta')."""
+    try:
+        query = urllib.parse.parse_qs(urllib.parse.urlparse(target or '').query)
+    except ValueError:
+        return {}
+    return {name: values[0] for name, values in query.items() if values}
+
+
+def progress_menu(title, marker, query):
+    """Righe del menu contestuale: segno di visto e 'Continua'."""
+    name = progress.key(title)
+    if not name:
+        return []
+    rows = []
+    if marker and marker.get('finished'):
+        rows.append((t(30046), 'RunPlugin(%s)' % url(
+            mode='progress', k=name, t=title, a='unwatch')))
+    else:
+        rows.append((t(30045), 'RunPlugin(%s)' % url(
+            mode='progress', k=name, t=title, a='watch',
+            u=query.get('u', ''), p=query.get('p', ''))))
+    rows.append((t(30047), 'RunPlugin(%s)' % url(
+        mode='progress', k=name, t=title, a='forget')))
+    return rows
+
+
 def entry_url(entry):
-    params = {'mode': 'play', 'u': entry['url'], 'title': entry['name']}
+    params = {'mode': 'play', 'u': entry['url'],
+              'title': playlist.clean_name(entry['name'])}
     extra = entry_extra(entry)
     if extra:
         params['p'] = extra
@@ -359,6 +419,7 @@ def choose_order(back='', groups=False, current=''):
 # Menu principale
 # --------------------------------------------------------------------------
 def show_root():
+    show_continue_row()
     if setting_bool('source_load', True):
         add_item(t(30011), url(mode='load'), art=source_art('load'),
                  info={'plot': t(30013), 'mediatype': 'video'})
@@ -403,6 +464,75 @@ def show_saved_lists():
         else:
             add_item(entry['name'], url(mode='list', id=entry['id']),
                      art=art, info=info, context=[remove])
+
+
+# --------------------------------------------------------------------------
+# Continua a guardare
+# --------------------------------------------------------------------------
+def show_continue_row():
+    """Riga in cima al menu: i video lasciati a meta."""
+    try:
+        rows = progress.continued()
+    except playlist_store.StoreError as exc:
+        log('posizioni non lette: %s' % exc)
+        return
+    if not rows:
+        return
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30043), len(rows)),
+             url(mode='continue'),
+             info={'plot': t(30050), 'mediatype': 'video'})
+
+
+def show_continue():
+    """I video da riprendere, dal piu' recente; ripartono dalla posizione."""
+    try:
+        rows = progress.continued()
+    except playlist_store.StoreError as exc:
+        log('posizioni non lette: %s' % exc)
+        rows = []
+    if not rows:
+        notify(t(30044))
+        end()
+        return
+
+    for entry in rows:
+        params = {'mode': 'play', 'u': entry.get('url') or '',
+                  'title': entry.get('title') or ''}
+        if entry.get('extra'):
+            params['p'] = entry['extra']
+        info = {'title': entry.get('title') or '', 'plot': t(30050),
+                'mediatype': 'video'}
+        add_item(entry.get('title') or '', url(**params), info=info,
+                 playable=True)
+    end('videos')
+
+
+def progress_action():
+    """Segna visto / non visto / togli da Continua, poi ridisegna la pagina."""
+    name = PARAMS.get('k', '')
+    action = PARAMS.get('a', '')
+    log('posizione %s: %s' % (action, PARAMS.get('t', name)))
+    try:
+        if action == 'watch':
+            progress.set_watched(name, True, PARAMS.get('t', ''),
+                                 PARAMS.get('u', ''), PARAMS.get('p', ''))
+            notify(t(30048))
+        elif action == 'unwatch':
+            progress.set_watched(name, False, PARAMS.get('t', ''))
+            notify(t(30052))
+        elif action == 'forget':
+            progress.forget(name)
+            notify(t(30049))
+    except playlist_store.StoreError as exc:
+        log('posizione non aggiornata: %s' % exc)
+        notify(t(30015), True)
+
+    # La pagina aperta deve mostrare subito il segno nuovo.
+    try:
+        xbmc.executebuiltin('Container.Refresh')
+    except Exception:
+        log('aggiornamento della pagina non disponibile')
+    end()
 
 
 # --------------------------------------------------------------------------
@@ -739,7 +869,7 @@ def ask_save(target, kind='list', entries=None, props=None, headers=None):
 
 
 def show_entries(entries, refresh_target=None, page=None, group=None,
-                 extra_rows=None, order=None, order_row=True):
+                 extra_rows=None, order=None, order_row=True, track=True):
     page = dict(page or {'mode': 'loaded'})
     order = order or list_order()
     grouped = playlist.has_groups(entries)
@@ -769,7 +899,7 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
                          art=logo_art(entry['logo']),
                          info={'title': label,
                                'plot': entry.get('plot') or entry['url'],
-                               'mediatype': 'video'})
+                               'mediatype': 'video'}, track=track)
                 continue
             label = guide_label(label, entry)
             second = ''
@@ -779,7 +909,7 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
                      info={'title': playlist.clean_name(entry['name']),
                            'plot': entry.get('plot') or entry['url'],
                            'mediatype': 'video'},
-                     playable=True, second=second)
+                     playable=True, second=second, track=track)
 
     if order_row:
         order_params = {'mode': 'order', 'back': url(**page), 'cur': current}
@@ -954,7 +1084,7 @@ def show_tv():
     # fila): niente riga "Ordine dei canali", che ripartirebbe dall'alfabetico.
     show_entries(entries, refresh_target=url(mode='tv_refresh'),
                  page=page, group=group, extra_rows=extra, order='file',
-                 order_row=False)
+                 order_row=False, track=False)
     end('videos')
     log('TV: %d canali in %.2fs' % (len(entries), time.time() - started))
 
@@ -998,7 +1128,7 @@ def show_tv_variants():
                  info={'title': variant.get('name') or label,
                        'plot': variant.get('plot') or variant.get('url'),
                        'mediatype': 'video'},
-                 playable=True, second=second)
+                 playable=True, second=second, track=False)
     end('videos')
 
 
@@ -1162,15 +1292,29 @@ def apply_stream_props(item, target, extra):
 
 def play(target, title='', extra=''):
     log('riproduco: %s' % target)
+    source = target
     item = xbmcgui.ListItem(path=target, offscreen=True)
     if title:
         item.setInfo('video', {'title': title})
+    start = progress.resume(title) if title else 0
+    if start:
+        # Kodi legge StartOffset prima di aprire il flusso: il video riparte
+        # da dove era rimasto, senza un salto visibile a riproduzione avviata.
+        item.setProperty('StartOffset', str(int(start)))
+        log('riprendo da %s: %s' % (progress.time_text(start), title))
     target = apply_stream_props(item, target, extra)
     item.setPath(target)
     chosen = item.getProperty('inputstream') or 'predefinito (demuxer Kodi)'
     manifest = item.getProperty('inputstream.adaptive.manifest_type') or '-'
     log('player scelto: %s | manifest: %s' % (chosen, manifest))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
+    if title:
+        # Il servizio in sottofondo segue la riproduzione e salva la posizione:
+        # questa pagina puo' chiudersi subito, la posizione non si perde.
+        try:
+            progress.begin(title, PARAMS.get('u') or source, extra, start)
+        except playlist_store.StoreError as exc:
+            log('posizione non seguita: %s' % exc)
 
 
 # --------------------------------------------------------------------------
@@ -1215,6 +1359,10 @@ def main():
         show_tv_variants()
     elif mode == 'tv_refresh':
         refresh_tv()
+    elif mode == 'continue':
+        show_continue()
+    elif mode == 'progress':
+        progress_action()
     elif mode == 'order':
         choose_order(PARAMS.get('back', ''), PARAMS.get('groups') == '1',
                      PARAMS.get('cur', ''))

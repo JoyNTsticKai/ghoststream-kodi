@@ -106,3 +106,47 @@ msgstr "Aggiornamento non riuscito: uso la copia salvata."
 msgctxt "#30041"
 msgid "Principale"
 msgstr "Principale"
+
+msgctxt "#30042"
+msgid "Riprendi da"
+msgstr "Riprendi da"
+
+msgctxt "#30043"
+msgid "Continua a guardare"
+msgstr "Continua a guardare"
+
+msgctxt "#30044"
+msgid "Niente da riprendere: i video lasciati a meta compaiono qui."
+msgstr "Niente da riprendere: i video lasciati a meta compaiono qui."
+
+msgctxt "#30045"
+msgid "Segna come visto"
+msgstr "Segna come visto"
+
+msgctxt "#30046"
+msgid "Segna come non visto"
+msgstr "Segna come non visto"
+
+msgctxt "#30047"
+msgid "Togli da Continua"
+msgstr "Togli da Continua"
+
+msgctxt "#30048"
+msgid "Segnato come visto"
+msgstr "Segnato come visto"
+
+msgctxt "#30049"
+msgid "Tolto da Continua"
+msgstr "Tolto da Continua"
+
+msgctxt "#30050"
+msgid "Riprendi i video da dove li avevi lasciati."
+msgstr "Riprendi i video da dove li avevi lasciati."
+
+msgctxt "#30051"
+msgid "visto"
+msgstr "visto"
+
+msgctxt "#30052"
+msgid "Segnato come non visto"
+msgstr "Segnato come non visto"
