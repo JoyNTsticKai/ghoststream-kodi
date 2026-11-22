@@ -14,9 +14,15 @@ SEARCH_URL = 'https://archive.org/advancedsearch.php'
 METADATA_URL = 'https://archive.org/metadata/%s'
 DOWNLOAD_URL = 'https://archive.org/download/%s/%s'
 THUMB_URL = 'https://archive.org/services/img/%s'
-USER_AGENT = 'plugin.video.ghoststream/1.9.10 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.9.11 (Kodi addon)'
 
 VIDEO_EXTENSIONS = ('.mp4', '.m4v', '.webm', '.mkv', '.ogv', '.m3u8')
+
+# Copie "pesanti": chiedono piu' banda di quanta archive.org di solito ne dia a
+# un singolo collegamento (~5 Mbit/s misurati), quindi il buffer di Kodi si
+# svuota e il video si blocca. Meglio dirlo prima di aprire la puntata.
+HEAVY_BITRATE = 2500000
+HEAVY_BYTES = 400 * 1024 * 1024
 
 SUGGESTED_QUERIES = (
     ("Cartoni animati", 'subject:"cartoni animati"'),
@@ -98,6 +104,23 @@ def _seconds(value):
     return seconds if seconds > 0 else None
 
 
+def _size_bytes(value):
+    try:
+        size = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return size if size > 0 else 0
+
+
+def _heavy(size, duration):
+    """True se la copia chiede piu' banda di quella che di solito arriva."""
+    if not size:
+        return False
+    if duration:
+        return size * 8.0 / duration > HEAVY_BITRATE
+    return size > HEAVY_BYTES
+
+
 def _text(value):
     """Alcuni campi di archive.org sono liste: si uniscono in una stringa."""
     if isinstance(value, (list, tuple)):
@@ -131,6 +154,8 @@ def playable_files(identifier):
             continue
         label = name.rsplit('/', 1)[-1]
         season, episode, title = naming.episode_info(label)
+        size = _size_bytes(entry.get('size'))
+        duration = _seconds(entry.get('length'))
         files.append({
             'name': name,
             'label': label,
@@ -139,7 +164,10 @@ def playable_files(identifier):
             'episode': episode,
             'format': entry.get('format') or '',
             'size': naming.human_size(entry.get('size')),
-            'duration': _seconds(entry.get('length')),
+            'bytes': size,
+            'duration': duration,
+            'bitrate': int(size * 8.0 / duration) if size and duration else 0,
+            'heavy': _heavy(size, duration),
             'priority': _priority(entry),
             'url': DOWNLOAD_URL % (
                 urllib.parse.quote(identifier, safe=''),

@@ -361,17 +361,25 @@ except archive_api.ArchiveError as exc:
 print('6) elenco a una riga per puntata')
 FAKE = [
     {'title': 'Il ritorno', 'label': 'ep01.mkv', 'season': None, 'episode': 1,
-     'format': 'Matroska', 'size': '516.0 MB', 'duration': 1456, 'priority': 0,
+     'format': 'Matroska', 'size': '516.0 MB', 'bytes': 541065216,
+     'duration': 1456, 'bitrate': 2973000, 'heavy': True, 'priority': 0,
      'url': 'http://example.com/01.mkv'},
     {'title': 'Il ritorno', 'label': 'ep01.mp4', 'season': None, 'episode': 1,
-     'format': 'h.264', 'size': '136.0 MB', 'duration': 1456, 'priority': 3,
+     'format': 'h.264', 'size': '136.0 MB', 'bytes': 142606336,
+     'duration': 1456, 'bitrate': 783551, 'heavy': False, 'priority': 3,
      'url': 'http://example.com/01.mp4'},
     {'title': 'La sfida', 'label': 'ep02.mp4', 'season': None, 'episode': 2,
-     'format': 'h.264', 'size': '140.0 MB', 'duration': 1440, 'priority': 3,
+     'format': 'h.264', 'size': '140.0 MB', 'bytes': 146800640,
+     'duration': 1440, 'bitrate': 815559, 'heavy': False, 'priority': 3,
      'url': 'http://example.com/02.mp4'},
     {'title': 'La fine', 'label': 'ep10.mp4', 'season': None, 'episode': 10,
-     'format': 'h.264', 'size': '141.0 MB', 'duration': 1440, 'priority': 3,
+     'format': 'h.264', 'size': '141.0 MB', 'bytes': 147849216,
+     'duration': 1440, 'bitrate': 821384, 'heavy': False, 'priority': 3,
      'url': 'http://example.com/10.mp4'},
+    {'title': 'L ultima sfida', 'label': 'ep11.mkv', 'season': None, 'episode': 11,
+     'format': 'Matroska', 'size': '842.7 MB', 'bytes': 883592691,
+     'duration': 1480, 'bitrate': 4776176, 'heavy': True, 'priority': 0,
+     'url': 'http://example.com/11.mkv'},
 ]
 META = {'title': 'Ken il Guerriero', 'plot': 'Trama.', 'creator': 'Autore', 'year': 1986}
 archive_api.playable_files = lambda identifier: ([dict(entry) for entry in FAKE], dict(META))
@@ -379,7 +387,7 @@ archive_api.playable_files = lambda identifier: ([dict(entry) for entry in FAKE]
 SETTINGS['source_archive'] = 'true'
 run('?mode=archive_item&id=Ken')
 print('   voci: %s' % [item['label'] for item in ITEMS])
-check(len(ITEMS) == 3, 'tre puntate, non quattro file')
+check(len(ITEMS) == 4, 'quattro puntate, non cinque file')
 check('(h.264' in ITEMS[0]['label'] and '2 versioni' in ITEMS[0]['label'],
       'formato preferito e numero di versioni sulla riga')
 check(ITEMS[0]['folder'] is True, 'la puntata con piu formati apre il sottomenu')
@@ -387,8 +395,18 @@ check('mode=archive_versions' in ITEMS[0]['url'] and 'ep=1' in ITEMS[0]['url'],
       'il sottomenu porta alla puntata giusta')
 check(ITEMS[1]['folder'] is False and 'mode=play' in ITEMS[1]['url'],
       'la puntata con un solo formato si riproduce subito')
-check([item['info'].get('episode') for item in ITEMS] == [1, 2, 10], 'puntate in ordine')
+check([item['info'].get('episode') for item in ITEMS] == [1, 2, 10, 11],
+      'puntate in ordine')
 check('516' not in ITEMS[0]['label'], 'la copia pesante non compare in elenco')
+check('versione pesante' in ITEMS[3]['label'],
+      'la puntata che esiste solo pesante e segnalata')
+check('pesante' not in ITEMS[1]['label'],
+      'la puntata con copia leggera non ha avviso')
+check('4.8 Mbps' in ITEMS[3]['info'].get('plot', ''),
+      'la trama spiega il limite della sorgente')
+check(archive_api._heavy(883592691, 1480) is True, 'copia da 883 MB pesante')
+check(archive_api._heavy(143890832, 1483) is False, 'copia da 137 MB leggera')
+check(archive_api._heavy(0, 0) is False, 'senza dimensione nessun avviso')
 
 print('7) sottomenu delle versioni')
 run('?mode=archive_versions&id=Ken&ep=1')
@@ -401,6 +419,8 @@ check('u=http://example.com/01.mp4' in urllib.parse.unquote(ITEMS[0]['url']),
       'la preferita e il file piccolo')
 check('Matroska' in ITEMS[1]['label'] and 'consigliato' not in ITEMS[1]['label'],
       'le altre versioni sono sotto, senza etichetta')
+check('versione pesante' in ITEMS[1]['label'],
+      'la versione grossa e segnalata pesante')
 check(all(item['folder'] is False for item in ITEMS), 'ogni versione e riproducibile')
 
 run('?mode=archive_versions&id=Ken&ep=99')
@@ -1283,10 +1303,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.10 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.10 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.11 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.11 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.10"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.11"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1380,7 +1400,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.10' in handle.read(), 'addon.xml 1.9.10 anche nel file appena letto')
+    check('1.9.11' in handle.read(), 'addon.xml 1.9.11 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1649,7 +1669,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.10' in manifest, 'addon.xml 1.9.10')
+check('1.9.11' in manifest, 'addon.xml 1.9.11')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')

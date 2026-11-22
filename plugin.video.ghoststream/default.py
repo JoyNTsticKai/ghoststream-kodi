@@ -162,6 +162,10 @@ LABELS = {
     30091: 'niente da rinnovare',
     30092: 'nessuna copia: apri la TV una volta',
     30093: 'Il flusso non parte: provo un\'altra copia.',
+    30094: 'versione pesante',
+    30095: 'Questa puntata esiste solo in versione pesante (%s, circa %s Mbps): '
+           'la sorgente puo\' non stare dietro al flusso. Se si blocca, alza la '
+           'cache in Impostazioni > Servizi > Caching.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -1121,6 +1125,20 @@ def episode_details(entry):
     return ' \u00b7 '.join(part for part in (entry['format'], entry['size']) if part)
 
 
+def heavy_mark(entry):
+    """'versione pesante' per le copie che chiedono piu' banda del solito."""
+    return t(30094) if entry.get('heavy') else ''
+
+
+def heavy_note(entry):
+    """Riga di trama che spiega perche' una copia pesante puo' bloccarsi."""
+    if not entry.get('heavy'):
+        return ''
+    rate = entry.get('bitrate') or 0
+    return t(30095) % (entry.get('size') or '-',
+                       ('%.1f' % (rate / 1000000.0)) if rate else '-')
+
+
 def show_archive_item(identifier):
     try:
         episodes, meta = archive_api.episodes(identifier)
@@ -1146,10 +1164,14 @@ def show_archive_item(identifier):
         title = entry_title(preferred)
         label = naming.episode_label(group['episode'], title, width)
         label = details_label(label, episode_details(preferred),
+                              heavy_mark(preferred),
                               '%d versioni' % len(files) if len(files) > 1 else '')
 
         info = episode_info(preferred, show_title, meta, base_plot)
         info['sorttitle'] = label
+        note = heavy_note(preferred)
+        if note:
+            info['plot'] = '%s\n%s' % (info['plot'], note) if info['plot'] else note
         art = {'thumb': thumb, 'fanart': thumb}
 
         if len(files) > 1:
@@ -1187,10 +1209,14 @@ def show_archive_versions(identifier, episode, season=None):
         title = entry_title(entry)
         label = naming.episode_label(entry['episode'], title, width)
         label = details_label(label, episode_details(entry),
+                              heavy_mark(entry),
                               t(30016) if index == 0 else '')
 
         info = episode_info(entry, show_title, meta, base_plot)
         info['sorttitle'] = label
+        note = heavy_note(entry)
+        if note:
+            info['plot'] = '%s\n%s' % (info['plot'], note) if info['plot'] else note
         add_item(label, url(mode='play', u=entry['url'], title=title),
                  art={'thumb': thumb, 'fanart': thumb}, info=info,
                  playable=True)
