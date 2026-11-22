@@ -15,7 +15,7 @@ SEARCH_URL = 'https://archive.org/advancedsearch.php'
 METADATA_URL = 'https://archive.org/metadata/%s'
 DOWNLOAD_URL = 'https://archive.org/download/%s/%s'
 THUMB_URL = 'https://archive.org/services/img/%s'
-USER_AGENT = 'plugin.video.ghoststream/1.9.17 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.9.18 (Kodi addon)'
 
 VIDEO_EXTENSIONS = ('.mp4', '.m4v', '.webm', '.mkv', '.ogv', '.m3u8')
 
@@ -117,6 +117,15 @@ def _size_bytes(value):
     return size if size > 0 else 0
 
 
+def _pixels(value):
+    """Altezza del video in pixel: 0 quando archive.org non la dichiara."""
+    try:
+        height = int(float(value))
+    except (TypeError, ValueError):
+        return 0
+    return height if height > 0 else 0
+
+
 def _heavy(size, duration):
     """True se la copia chiede piu' banda di quella che di solito arriva."""
     if not size:
@@ -161,6 +170,7 @@ def playable_files(identifier):
         season, episode, title = naming.episode_info(label)
         size = _size_bytes(entry.get('size'))
         duration = _seconds(entry.get('length'))
+        height = _pixels(entry.get('height'))
         files.append({
             'name': name,
             'label': label,
@@ -171,6 +181,7 @@ def playable_files(identifier):
             'size': naming.human_size(entry.get('size')),
             'bytes': size,
             'duration': duration,
+            'height': height,
             'bitrate': int(size * 8.0 / duration) if size and duration else 0,
             'heavy': _heavy(size, duration),
             'priority': _priority(entry),

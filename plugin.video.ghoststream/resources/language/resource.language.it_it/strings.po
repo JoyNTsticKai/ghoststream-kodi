@@ -368,6 +368,10 @@ msgctxt "#30106"
 msgid "Riprova"
 msgstr "Riprova"
 
+msgctxt "#30108"
+msgid "UFFICIALE"
+msgstr "UFFICIALE"
+
 msgctxt "#30107"
 msgid ""
 "Internet Archive a volte serve piano: con la cache piccola il video si "

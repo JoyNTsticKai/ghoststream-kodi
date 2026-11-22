@@ -324,8 +324,8 @@ SETTINGS['source_youtube'] = 'false'
 SETTINGS['source_archive'] = 'false'
 run('')
 labels = [item['label'] for item in ITEMS]
-check(labels == ['Cerca', 'Carica un link (M3U o video)', 'Stato',
-                 'Diagnostica'],
+check(labels == ['[B]Cerca[/B]', '[B]Carica un link (M3U o video)[/B]',
+                 '[B]Stato[/B]', '[B]Diagnostica[/B]'],
       'voce Carica nel menu, sotto Cerca: %s' % labels)
 check(ITEMS[0]['art']['thumb'].endswith('search.png'),
       'Cerca ha la sua icona')
@@ -421,8 +421,9 @@ SETTINGS['source_archive'] = 'true'
 run('?mode=archive_item&id=Ken')
 print('   voci: %s' % [item['label'] for item in ITEMS])
 check(len(ITEMS) == 4, 'quattro puntate, non cinque file')
-check('(h.264' in ITEMS[0]['label'] and '2 versioni' in ITEMS[0]['label'],
+check('h.264' in ITEMS[0]['label'] and '2 versioni' in ITEMS[0]['label'],
       'formato preferito e numero di versioni sulla riga')
+check('24 min' in ITEMS[0]['label'], 'durata della puntata sulla riga')
 check(ITEMS[0]['folder'] is True, 'la puntata con piu formati apre il sottomenu')
 check('mode=archive_versions' in ITEMS[0]['url'] and 'ep=1' in ITEMS[0]['url'],
       'il sottomenu porta alla puntata giusta')
@@ -472,8 +473,8 @@ check(os.path.isfile(os.path.join(PROFILE_ROOT, 'lists.json')),
 run('')
 labels = [item['label'] for item in ITEMS]
 print('   menu: %s' % labels)
-check(labels == ['Cerca', 'Carica un link (M3U o video)', 'La mia lista',
-                 'Stato', 'Diagnostica'],
+check(labels == ['[B]Cerca[/B]', '[B]Carica un link (M3U o video)[/B]',
+                 'La mia lista', '[B]Stato[/B]', '[B]Diagnostica[/B]'],
       'la lista salvata compare nel menu principale')
 check(ITEMS[2]['folder'] is True, 'la lista salvata apre un elenco')
 check(ITEMS[2]['art']['thumb'] == 'http://example.com/ken.png',
@@ -856,14 +857,16 @@ run('?mode=tv')
 labels = [item['label'] for item in ITEMS]
 print('   canali: %s' % labels)
 check(len(ITEMS) == 5, 'tre canali, filtro e Aggiorna')
-check([label.split('  ')[0] for label in labels[:3]] ==
+check([label.split('[/COLOR]  ', 1)[-1].split('  ')[0] for label in labels[:3]] ==
       ['Rai 1', 'Rai 2', 'Canale Senza Guida'],
       'canali in ordine di numero, chi non ha numero in fondo')
+check(labels[0].startswith('[COLOR=FF3EF2D0]1[/COLOR]  Rai 1'),
+      'numero del canale in evidenza davanti al nome: %s' % labels[0])
 check(not any(label.startswith('Ordine dei canali') for label in labels),
       'in TV non serve la scelta dell\'ordine')
-check(any(label.startswith('Rai 1') and 'Telegiornale' in label
+check(any('Rai 1' in label and 'Telegiornale' in label
           for label in labels), 'programma in onda accanto al canale')
-rai1 = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+rai1 = [item for item in ITEMS if 'Rai 1' in item['label']][0]
 check(rai1['art']['thumb'] == 'http://example.com/rai1.png', 'logo del canale')
 check('Dopo: Film della sera' in rai1['info']['plot'],
       'prossimo programma nel dettaglio')
@@ -897,7 +900,7 @@ check(any(label == 'Tutti i canali' for label in labels),
       'dal filtro si torna a tutti i canali')
 
 run('')
-check('TV in chiaro' in [item['label'] for item in ITEMS],
+check('[B]TV in chiaro[/B]' in [item['label'] for item in ITEMS],
       'voce TV nel menu principale')
 
 
@@ -1128,9 +1131,9 @@ check([copia['variant'] for copia in rai1['variants']] ==
 
 run('?mode=tv')
 labels = [item['label'] for item in ITEMS]
-check(sum(1 for label in labels if label.startswith('Rai 1')) == 1,
+check(sum(1 for label in labels if 'Rai 1' in label) == 1,
       'una sola voce Rai 1 in elenco: %s' % labels)
-voce = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+voce = [item for item in ITEMS if 'Rai 1' in item['label']][0]
 check(voce['folder'] and 'mode=tv_var' in voce['url'] and '(3)' in voce['label'],
       'la voce apre il sottomenu con quante copie ci sono')
 
@@ -1270,7 +1273,7 @@ check(len(azioni) >= 2, 'le azioni sulle posizioni passano dal modo progress')
 
 run('')
 print('   menu: %s' % [item['label'] for item in ITEMS])
-check(ITEMS[0]['label'].startswith('Continua a guardare') and
+check('Continua a guardare' in ITEMS[0]['label'] and
       'mode=continue' in ITEMS[0]['url'],
       'riga Continua in cima al menu principale: %s' % ITEMS[0]['label'])
 check('(1)' in ITEMS[0]['label'], 'la riga dice quanti video aspettano')
@@ -1336,10 +1339,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.17 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.17 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.18 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.18 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.17"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.18"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1402,10 +1405,10 @@ favorites.add('Doppione', 'http://example.com/dup.mp4')
 
 run('')
 print('   menu: %s' % [item['label'] for item in ITEMS])
-check(ITEMS[0]['label'].startswith('La mia lista') and
+check('La mia lista' in ITEMS[0]['label'] and
       'mode=favorites' in ITEMS[0]['url'],
       'La mia lista in cima al menu: %s' % ITEMS[0]['label'])
-check(ITEMS[1]['label'].startswith('Continua a guardare'),
+check('Continua a guardare' in ITEMS[1]['label'],
       'subito sotto, Continua a guardare')
 
 run('?mode=favorites')
@@ -1433,7 +1436,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.17' in handle.read(), 'addon.xml 1.9.17 anche nel file appena letto')
+    check('1.9.18' in handle.read(), 'addon.xml 1.9.18 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1481,7 +1484,7 @@ labels = [item['label'] for item in ITEMS]
 print('   lista: %s' % labels)
 check(not any('Episodio con logo' in label for label in labels),
       'la voce nascosta non compare piu nel suo elenco')
-check(any(label.startswith('Voci nascoste') for label in labels),
+check(any('Voci nascoste' in label for label in labels),
       'in fondo la riga per rivedere i nascosti')
 
 run('?mode=hidden')
@@ -1530,7 +1533,7 @@ check(not any('Sport Uno' in label for label in labels),
       'i canali del gruppo nascosto spariscono')
 check(any('Uno della Rai' in label for label in labels),
       'gli altri canali restano al loro posto')
-check(any(label.startswith('Voci nascoste') for label in labels),
+check(any('Voci nascoste' in label for label in labels),
       'la riga dei nascosti c e anche qui')
 
 run('?mode=unhide&tipo=group&k=%s' % hidden.key('Sport'))
@@ -1550,7 +1553,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'hidden.py')),
 print('27) canali con piu flussi anche in La mia lista')
 SETTINGS['tv_url'] = doppia
 run('?mode=tv')
-voce = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+voce = [item for item in ITEMS if 'Rai 1' in item['label']][0]
 print('   menu: %s' % [riga[0] for riga in voce['context']])
 check(voce['folder'] and voce['context'][0][0] == 'Aggiungi a La mia lista',
       'la riga che apre il sottomenu ha comunque Aggiungi a La mia lista')
@@ -1702,7 +1705,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.17' in manifest, 'addon.xml 1.9.17')
+check('1.9.18' in manifest, 'addon.xml 1.9.18')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1788,7 +1791,7 @@ check(labels[0].startswith('Canali TV: nessuna copia') and
       'senza copie la pagina lo dice: %s' % labels[:2])
 
 run('')
-check(any(item['label'] == 'Stato' for item in ITEMS),
+check(any(item['label'] == '[B]Stato[/B]' for item in ITEMS),
       'Stato raggiungibile dal menu principale')
 check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'status.py')),
       'il modulo Stato viaggia con l addon')
@@ -2046,11 +2049,14 @@ check('Dirette ufficiali' not in [item['label'] for item in ITEMS],
       'nessuna riga separata per le dirette: stanno nella TV in chiaro')
 run('?mode=tv')
 labels = [item['label'] for item in ITEMS]
-check(sum(1 for label in labels if label.startswith('Rai 1')) == 1,
+check(sum(1 for label in labels if '  Rai 1' in label) == 1,
       'una sola Rai 1 anche nella pagina TV: %s' % labels)
-riga = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+riga = [item for item in ITEMS if '  Rai 1' in item['label']][0]
 check('In onda:' in riga['label'] and 'Uno Mattina' in riga['label'],
       'con il programma in onda dalla guida')
+check('UFFICIALE' in riga['label'] and riga['label'].startswith(
+          '[COLOR=FF3EF2D0]1[/COLOR]  '),
+      'numero e bollino ufficiale: %s' % riga['label'])
 check('relinkerServlet' in urllib.parse.unquote(riga['url']),
       'la riga riproduce il flusso ufficiale')
 run('?' + urllib.parse.urlparse(riga['url']).query)
@@ -2073,7 +2079,7 @@ diagnostica.reach = fake_reach
 archive_api.search = lambda q, page=1, rows=30: ([{'identifier': 'x'}], 42)
 CACHE.update({'memorysize': 256, 'readfactor': 0, 'calls': [], 'fail': False})
 run('')
-check('Diagnostica' in [item['label'] for item in ITEMS],
+check('[B]Diagnostica[/B]' in [item['label'] for item in ITEMS],
       'voce Diagnostica nel menu principale')
 run('?mode=diag')
 labels = [item['label'] for item in ITEMS]

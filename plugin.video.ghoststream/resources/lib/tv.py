@@ -238,7 +238,8 @@ def _with_official(entries):
     canali: scartando le voci con la stessa chiave, Rai 1 compare una volta
     sola e quella che si apre funziona.
     """
-    official = official_channels()
+    # Il segno 'official' viaggia con la voce: la lista mostra il bollino.
+    official = [dict(entry, official=True) for entry in official_channels()]
     keys = {channel_key(plain_name(entry.get('name'))) for entry in official}
     rest = [entry for entry in entries or ()
             if channel_key(plain_name(entry.get('name'))) not in keys]

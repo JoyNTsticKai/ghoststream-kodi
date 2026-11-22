@@ -180,6 +180,7 @@ LABELS = {
     30107: 'Internet Archive a volte serve piano: con la cache piccola il '
            'video si ferma dopo pochi secondi. La cache di Kodi e\' di %d MB: '
            'portarla a 256 MB aiuta. Vuoi che lo faccia ora?',
+    30108: 'UFFICIALE',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -229,6 +230,11 @@ def t(string_id):
     except Exception:
         text = ''
     return text or LABELS.get(string_id, '')
+
+
+def strong(label):
+    """Grassetto per i titoli delle sezioni: nel menu si staccano dal resto."""
+    return '[B]%s[/B]' % label
 
 
 def info_row(message, target, plot=''):
@@ -578,33 +584,33 @@ def choose_order(back='', groups=False, current=''):
 def show_root():
     show_favorites_row()
     show_continue_row()
-    add_item(t(30071), url(mode='search'), art=source_art('search'),
+    add_item(strong(t(30071)), url(mode='search'), art=source_art('search'),
              info={'plot': t(30072), 'mediatype': 'video'})
     if setting_bool('source_load', True):
-        add_item(t(30011), url(mode='load'), art=source_art('load'),
+        add_item(strong(t(30011)), url(mode='load'), art=source_art('load'),
                  info={'plot': t(30013), 'mediatype': 'video'})
         show_saved_lists()
     if setting_bool('source_youtube', True):
-        add_item(t(30000), url(mode='youtube'), art=source_art('youtube'),
+        add_item(strong(t(30000)), url(mode='youtube'), art=source_art('youtube'),
                  info={'plot': 'Canali ufficiali e i tuoi abbonamenti, '
                                'riprodotti con l\'addon YouTube.',
                        'mediatype': 'video'})
     if setting_bool('source_archive', True):
-        add_item(t(30001), url(mode='archive'), art=source_art('archive'),
+        add_item(strong(t(30001)), url(mode='archive'), art=source_art('archive'),
                  info={'plot': 'Film, cartoni e documentari in italiano di pubblico '
                                'dominio o con licenza libera.',
                        'mediatype': 'video'})
     if setting_bool('source_tv', True):
-        add_item(t(30032), url(mode='tv'), art=source_art('tv'),
+        add_item(strong(t(30032)), url(mode='tv'), art=source_art('tv'),
                  info={'plot': t(30033), 'mediatype': 'video'})
     if setting_bool('source_local', False):
-        add_item(t(30002), url(mode='local', path=''), art=source_art('local'),
+        add_item(strong(t(30002)), url(mode='local', path=''), art=source_art('local'),
                  info={'plot': 'I tuoi file video, su disco o su NAS.',
                        'mediatype': 'video'})
     show_hidden_row()
-    add_item(t(30081), url(mode='status'), art=source_art('tv'),
+    add_item(strong(t(30081)), url(mode='status'), art=source_art('tv'),
              info={'plot': t(30082), 'mediatype': 'video'})
-    add_item(t(30102), url(mode='diag'), art=source_art('search'),
+    add_item(strong(t(30102)), url(mode='diag'), art=source_art('search'),
              info={'plot': t(30103), 'mediatype': 'video'})
     end()
 
@@ -829,7 +835,7 @@ def show_hidden_row():
         return
     if not total:
         return
-    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30062), total),
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (strong(t(30062)), total),
              url(mode='hidden'),
              info={'plot': t(30067), 'mediatype': 'video'})
 
@@ -915,8 +921,8 @@ def show_favorites_row():
         return
     if not rows:
         return
-    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30055), len(rows)),
-             url(mode='favorites'),
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (strong(t(30055)), len(rows)),
+             url(mode='favorites'), art=source_art('favorites'),
              info={'plot': t(30059), 'mediatype': 'video'})
 
 
@@ -992,7 +998,7 @@ def show_continue_row():
         return
     if not rows:
         return
-    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30043), len(rows)),
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (strong(t(30043)), len(rows)),
              url(mode='continue'),
              info={'plot': t(30050), 'mediatype': 'video'})
 
@@ -1143,9 +1149,24 @@ def episode_info(entry, show_title, meta, plot):
     return info
 
 
+def duration_text(seconds):
+    """'24 min' da una durata in secondi; vuoto se non c'e'."""
+    try:
+        total = int(float(seconds or 0))
+    except (TypeError, ValueError):
+        return ''
+    if total <= 0:
+        return ''
+    return '%d min' % int(round(total / 60.0))
+
+
 def episode_details(entry):
-    """'h.264 · 136.0 MB' accanto al titolo della puntata."""
-    return ' \u00b7 '.join(part for part in (entry['format'], entry['size']) if part)
+    """'480p · 24 min · h.264 · 136.0 MB' accanto al titolo della puntata."""
+    height = entry.get('height') or 0
+    quality = '%dp' % height if height else ''
+    return ' \u00b7 '.join(part for part in (
+        quality, duration_text(entry.get('duration')),
+        entry['format'], entry['size']) if part)
 
 
 def heavy_mark(entry):
@@ -1439,6 +1460,12 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
             if entry_group and hidden.has_group(entry_group):
                 continue
             hide_rows = hide_menu(label, entry_group)
+            # Numero del telecomando in evidenza e bollino per le dirette
+            # ufficiali: si riconoscono senza leggere il nome.
+            if page.get('mode') == 'tv' and entry.get('number'):
+                label = '[COLOR=FF3EF2D0]%d[/COLOR]  %s' % (entry['number'], label)
+            if entry.get('official'):
+                label += '  [COLOR=FFC04BF0]%s[/COLOR]' % t(30108)
             if entry_group and group is None:
                 label += '  [COLOR=grey](%s)[/COLOR]' % entry_group
             variants = entry.get('variants') or []
