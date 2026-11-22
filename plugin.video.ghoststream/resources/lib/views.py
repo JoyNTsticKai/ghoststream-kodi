@@ -7,6 +7,10 @@ riparte dalla lista. Qui la vista letta da Kodi viene copiata nella cartella
 dati dell'addon e riapplicata quando la stessa cartella si riapre, con la pausa
 che serve: senza, Kodi applica la vista alla cartella precedente (bug noto di
 Container.SetViewMode).
+
+Conta sempre per prima la vista che Kodi ha adesso: se ne scegli un'altra, la
+copia locale si allinea a quella. La copia serve solo come rete di sicurezza
+quando la riga di Kodi non c'e' piu'.
 """
 
 import glob
@@ -83,19 +87,21 @@ def apply(target):
 
     Restituisce l'id applicato, o 0 se questa cartella non ha una vista sua.
     """
-    view = 0
     try:
-        view = int(playlist_store.read_data(STORE_FILE).get(target) or 0)
+        saved = int(playlist_store.read_data(STORE_FILE).get(target) or 0)
     except (TypeError, ValueError):
-        view = 0
+        saved = 0
+    try:
+        skin = xbmc.getSkinDir()
+    except Exception:
+        skin = ''
+    # Quella di Kodi e' la scelta piu' recente (l'utente puo' aver cambiato
+    # vista): la copia locale vale solo se Kodi non ha piu' la riga.
+    view = stored_view(target, skin)
     if not view:
-        try:
-            skin = xbmc.getSkinDir()
-        except Exception:
-            skin = ''
-        view = stored_view(target, skin)
-        if view:
-            remember(target, view)
+        view = saved
+    elif view != saved:
+        remember(target, view)
     if not view:
         return 0
     try:

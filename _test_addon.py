@@ -238,7 +238,7 @@ class Addon(object):
         return {
             'id': 'plugin.video.ghoststream',
             'name': 'Cartoni',
-            'version': '1.9.20',
+            'version': '1.9.21',
             'path': os.path.abspath('plugin.video.ghoststream'),
             'profile': PROFILE,
         }.get(key, '')
@@ -1011,15 +1011,24 @@ check(views.apply(radice) == 66036 and
       'vista riapplicata alla cartella')
 check(playlist_store.read_data('views.json').get(radice) == 66036,
       'vista copiata nella cartella dati dell addon')
+connection = sqlite3.connect(dbpath)
+connection.execute('update view set viewMode=50 where path=?', (radice,))
+connection.commit()
+connection.close()
+BUILTINS[:] = []
+check(views.apply(radice) == 50 and 'Container.SetViewMode(50)' in BUILTINS,
+      'se cambio vista vince quella nuova, non la copia vecchia: %s' % BUILTINS)
+check(playlist_store.read_data('views.json').get(radice) == 50,
+      'la copia locale si allinea alla vista nuova')
 os.remove(dbpath)
 BUILTINS[:] = []
-check(views.apply(radice) == 66036 and
-      'Container.SetViewMode(66036)' in BUILTINS,
+check(views.apply(radice) == 50 and
+      'Container.SetViewMode(50)' in BUILTINS,
       'senza il database di Kodi vale la copia locale')
 check(views.stored_view(radice) == 0, 'database assente: nessuna vista da leggere')
 run('')
-check('Container.SetViewMode(66036)' in BUILTINS,
-      'aprendo il menu la vista scelta viene applicata davvero')
+check('Container.SetViewMode(50)' in BUILTINS,
+      'aprendo il menu resta la vista scelta davvero')
 
 print('19) canali TV in ordine di numero (Rai 1, Rai 2, Rai 3...)')
 disordinati = [{'name': 'Zeta TV'}, {'name': 'Canale 5 HD'},
@@ -1342,10 +1351,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.20 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.20 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.21 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.21 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.20"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.21"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1439,7 +1448,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.20' in handle.read(), 'addon.xml 1.9.20 anche nel file appena letto')
+    check('1.9.21' in handle.read(), 'addon.xml 1.9.21 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1708,7 +1717,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.20' in manifest, 'addon.xml 1.9.20')
+check('1.9.21' in manifest, 'addon.xml 1.9.21')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -2174,10 +2183,10 @@ print('35) aggiornamento dal repository')
 xml = ('<?xml version="1.0"?>'
        '<addons><addon id="plugin.video.ghoststream" version="1.9.99"/>'
        '<addon id="repository.ghoststream" version="1.0.0"/></addons>')
-check(update.newer('1.9.99', '1.9.20') and update.newer('1.10', '1.9.99') and
-      not update.newer('1.9.9', '1.9.20'),
+check(update.newer('1.9.99', '1.9.21') and update.newer('1.10', '1.9.99') and
+      not update.newer('1.9.9', '1.9.21'),
       'il confronto e numerico, non alfabetico')
-check(update.parse('1.9.20') == (1, 9, 20) and update.parse('') == (),
+check(update.parse('1.9.21') == (1, 9, 21) and update.parse('') == (),
       'versione letta a pezzi')
 check(update.version_in(xml, 'plugin.video.ghoststream') == '1.9.99' and
       update.version_in('rotto', 'plugin.video.ghoststream') == '',
