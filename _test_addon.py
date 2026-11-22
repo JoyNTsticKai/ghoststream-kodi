@@ -256,7 +256,8 @@ sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
 from resources.lib import (archive_api, favorites, hidden, playlist,  # noqa: E402
-                           playlist_store, progress, search, tv, views, youtube)
+                           playlist_store, progress, search, status, tv,
+                           views, youtube)
 
 
 def run(param=''):
@@ -284,7 +285,7 @@ SETTINGS['source_youtube'] = 'false'
 SETTINGS['source_archive'] = 'false'
 run('')
 labels = [item['label'] for item in ITEMS]
-check(labels == ['Cerca', 'Carica un link (M3U o video)'],
+check(labels == ['Cerca', 'Carica un link (M3U o video)', 'Stato'],
       'voce Carica nel menu, sotto Cerca: %s' % labels)
 check(ITEMS[0]['art']['thumb'].endswith('search.png'),
       'Cerca ha la sua icona')
@@ -410,7 +411,8 @@ check(os.path.isfile(os.path.join(PROFILE_ROOT, 'lists.json')),
 run('')
 labels = [item['label'] for item in ITEMS]
 print('   menu: %s' % labels)
-check(labels == ['Cerca', 'Carica un link (M3U o video)', 'La mia lista'],
+check(labels == ['Cerca', 'Carica un link (M3U o video)', 'La mia lista',
+                 'Stato'],
       'la lista salvata compare nel menu principale')
 check(ITEMS[2]['folder'] is True, 'la lista salvata apre un elenco')
 check(ITEMS[2]['art']['thumb'] == 'http://example.com/ken.png',
@@ -1273,10 +1275,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.7 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.7 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.8 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.8 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.7"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.8"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1370,7 +1372,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.7' in handle.read(), 'addon.xml 1.9.7 anche nel file appena letto')
+    check('1.9.8' in handle.read(), 'addon.xml 1.9.8 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1639,6 +1641,84 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.7' in manifest, 'addon.xml 1.9.7')
+check('1.9.8' in manifest, 'addon.xml 1.9.8')
+
+print('29) pagina Stato')
+check(status.age_text(None) == 'mai', 'copia assente: mai')
+check([status.age_text(30), status.age_text(300), status.age_text(7200),
+       status.age_text(3 * 86400)] == ['adesso', '5 min', '2 h', '3 giorni'],
+      'eta leggibile in minuti, ore e giorni')
+check(status.when_text(0) == 'mai' and status.when_text(time.time()),
+      'data del giro del servizio leggibile')
+
+playlist_store.write_data(tv.CHANNEL_CACHE, {
+    'urls': [], 'fetched': int(time.time()) - 7200,
+    'entries': [{'name': 'Rai 1', 'url': 'http://example.com/1.m3u8', 'logo': ''},
+                {'name': 'Rai 1 HD', 'url': 'http://example.com/1hd.m3u8',
+                 'logo': ''},
+                {'name': 'Rai 2', 'url': 'http://example.com/2.m3u8', 'logo': ''}]})
+canali = status.channels_info()
+check(canali['channels'] == 2 and canali['streams'] == 3,
+      'canali e flussi contati dalla copia locale: %s' % canali)
+check(7100 < canali['age'] < 7300, 'eta della copia dei canali')
+playlist_store.write_data(tv.GUIDE_CACHE, {
+    'sources': [], 'fetched': int(time.time()) - 300,
+    'guide': {'aliases': {}, 'programmes': {'rai1': [], 'rai2': []}}})
+guida = status.guide_info()
+check(guida['channels'] == 2 and guida['age'] < 400,
+      'canali con guida ed eta della copia')
+
+playlist_store.write_data('service.json', {})
+check(status.service_run() == {'when': 0, 'renewed': []},
+      'servizio mai girato: nessun segno')
+status.mark_service(['canali'])
+giro = status.service_run()
+check(giro['when'] > 0 and giro['renewed'] == ['canali'],
+      'il giro del servizio resta scritto nella cartella dati')
+
+run('?mode=status')
+labels = [item['label'] for item in ITEMS]
+print('   stato: %s' % labels)
+check(len(ITEMS) == 4, 'quattro righe: canali, guida, servizio, rinnova')
+check(labels[0].startswith('Canali TV: 2 canali (3 flussi)') and
+      'copia di 2 h' in labels[0], 'riga dei canali con eta della copia')
+check(labels[1].startswith('Guida TV: 2 canali con guida') and
+      'copia di 5 min' in labels[1], 'riga della guida con eta della copia')
+check(labels[2].startswith('Ultimo rinnovo del servizio') and
+      'canali' in labels[2], 'riga dell ultimo rinnovo del servizio')
+check(labels[3] == 'Rinnova ora' and 'mode=status_refresh' in ITEMS[3]['url'],
+      'pulsante Rinnova ora')
+
+chiamate = []
+channels_originale, guide_originale = tv.channels, tv.guide
+tv.channels = lambda url='', force=False: (chiamate.append(('canali', force)), [])[1]
+tv.guide = lambda url='', force=False: (chiamate.append(('guida', force)), {})[1]
+run('?mode=status_refresh')
+check(chiamate == [('canali', True), ('guida', True)],
+      'Rinnova ora forza canali e guida: %s' % chiamate)
+check(any('mode=status' in command for command in BUILTINS),
+      'e torna alla pagina Stato')
+
+playlist_store.write_data('service.json', {})
+service.refresh()
+check(status.service_run()['when'] > 0,
+      'il servizio segna il suo giro per la pagina Stato')
+tv.channels, tv.guide = channels_originale, guide_originale
+
+playlist_store.write_data(tv.CHANNEL_CACHE, {'urls': [], 'fetched': 0,
+                                             'entries': []})
+playlist_store.write_data(tv.GUIDE_CACHE, {'sources': [], 'fetched': 0,
+                                           'guide': {}})
+run('?mode=status')
+labels = [item['label'] for item in ITEMS]
+check(labels[0].startswith('Canali TV: nessuna copia') and
+      labels[1].startswith('Guida TV: nessuna copia'),
+      'senza copie la pagina lo dice: %s' % labels[:2])
+
+run('')
+check(any(item['label'] == 'Stato' for item in ITEMS),
+      'Stato raggiungibile dal menu principale')
+check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'status.py')),
+      'il modulo Stato viaggia con l addon')
 
 print('ESITO OK')

@@ -27,8 +27,8 @@ import xbmcaddon
 import xbmcvfs
 
 from resources.lib import (archive_api, favorites, hidden, local, naming,
-                           playlist, playlist_store, progress, search, tv,
-                           views, youtube)
+                           playlist, playlist_store, progress, search, status,
+                           tv, views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -149,6 +149,18 @@ LABELS = {
     30078: 'Internet Archive',
     30079: 'Cerca una parola',
     30080: 'Niente nei canali TV, nelle liste e nella raccolta.',
+    30081: 'Stato',
+    30082: 'Eta delle copie salvate, ultimo rinnovo del servizio e numero di canali.',
+    30083: 'Canali TV',
+    30084: 'Guida TV',
+    30085: 'Ultimo rinnovo del servizio',
+    30086: 'Rinnova ora',
+    30087: 'mai',
+    30088: 'copia di %s',
+    30089: '%d canali (%d flussi)',
+    30090: '%d canali con guida',
+    30091: 'niente da rinnovare',
+    30092: 'nessuna copia: apri la TV una volta',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -539,6 +551,8 @@ def show_root():
                  info={'plot': 'I tuoi file video, su disco o su NAS.',
                        'mediatype': 'video'})
     show_hidden_row()
+    add_item(t(30081), url(mode='status'), art=source_art('tv'),
+             info={'plot': t(30082), 'mediatype': 'video'})
     end()
 
 
@@ -562,6 +576,69 @@ def show_saved_lists():
         else:
             add_item(entry['name'], url(mode='list', id=entry['id']),
                      art=art, info=info, context=[remove])
+
+
+# --------------------------------------------------------------------------
+# Stato delle copie locali
+# --------------------------------------------------------------------------
+def show_status():
+    """Cosa c'e' nelle copie salvate e quando il servizio ha rinnovato."""
+    try:
+        canali = status.channels_info()
+        guida = status.guide_info()
+        servizio = status.service_run()
+    except playlist_store.StoreError as exc:
+        log('stato non leggibile: %s' % exc)
+        notify(t(30015), True)
+        end()
+        return
+
+    page = url(mode='status')
+    if canali['streams']:
+        label = '%s: %s  [COLOR=grey](%s)[/COLOR]' % (
+            t(30083), t(30089) % (canali['channels'], canali['streams']),
+            t(30088) % status.age_text(canali['age']))
+    else:
+        label = '%s: %s' % (t(30083), t(30092))
+    add_item(label, page, info={'plot': t(30082), 'mediatype': 'video'})
+
+    if guida['channels']:
+        label = '%s: %s  [COLOR=grey](%s)[/COLOR]' % (
+            t(30084), t(30090) % guida['channels'],
+            t(30088) % status.age_text(guida['age']))
+    else:
+        label = '%s: %s' % (t(30084), t(30092))
+    add_item(label, page, info={'plot': t(30082), 'mediatype': 'video'})
+
+    if servizio['when']:
+        done = ', '.join(servizio['renewed']) or t(30091)
+        label = '%s: %s  [COLOR=grey](%s)[/COLOR]' % (
+            t(30085), status.when_text(servizio['when']), done)
+    else:
+        label = '%s: %s' % (t(30085), t(30087))
+    add_item(label, page, info={'plot': t(30082), 'mediatype': 'video'})
+
+    add_item(t(30086), url(mode='status_refresh'), art=source_art('tv'),
+             info={'plot': 'Riscarica canali e guida adesso.',
+                   'mediatype': 'video'})
+    end('videos')
+
+
+def refresh_status():
+    """Rinnova canali e guida adesso e torna alla pagina Stato."""
+    ok = True
+    try:
+        tv.channels(setting_text('tv_url', ''), force=True)
+    except tv.TvError as exc:
+        log('canali TV non aggiornati: %s' % exc)
+        ok = False
+    try:
+        tv.guide(setting_text('epg_url', ''), force=True)
+    except tv.TvError as exc:
+        log('guida TV non aggiornata: %s' % exc)
+        ok = False
+    notify(t(30023) if ok else t(30024), not ok)
+    redirect(url(mode='status'))
 
 
 # --------------------------------------------------------------------------
@@ -1764,6 +1841,10 @@ def main():
         show_hidden()
     elif mode == 'unhide':
         unhide_action()
+    elif mode == 'status':
+        show_status()
+    elif mode == 'status_refresh':
+        refresh_status()
     elif mode == 'search':
         show_search()
     elif mode == 'search_results':

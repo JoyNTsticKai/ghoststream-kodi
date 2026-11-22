@@ -262,3 +262,51 @@ msgstr "Cerca una parola"
 msgctxt "#30080"
 msgid "Niente nei canali TV, nelle liste e nella raccolta."
 msgstr "Niente nei canali TV, nelle liste e nella raccolta."
+
+msgctxt "#30081"
+msgid "Stato"
+msgstr "Stato"
+
+msgctxt "#30082"
+msgid "Eta delle copie salvate, ultimo rinnovo del servizio e numero di canali."
+msgstr "Eta delle copie salvate, ultimo rinnovo del servizio e numero di canali."
+
+msgctxt "#30083"
+msgid "Canali TV"
+msgstr "Canali TV"
+
+msgctxt "#30084"
+msgid "Guida TV"
+msgstr "Guida TV"
+
+msgctxt "#30085"
+msgid "Ultimo rinnovo del servizio"
+msgstr "Ultimo rinnovo del servizio"
+
+msgctxt "#30086"
+msgid "Rinnova ora"
+msgstr "Rinnova ora"
+
+msgctxt "#30087"
+msgid "mai"
+msgstr "mai"
+
+msgctxt "#30088"
+msgid "copia di %s"
+msgstr "copia di %s"
+
+msgctxt "#30089"
+msgid "%d canali (%d flussi)"
+msgstr "%d canali (%d flussi)"
+
+msgctxt "#30090"
+msgid "%d canali con guida"
+msgstr "%d canali con guida"
+
+msgctxt "#30091"
+msgid "niente da rinnovare"
+msgstr "niente da rinnovare"
+
+msgctxt "#30092"
+msgid "nessuna copia: apri la TV una volta"
+msgstr "nessuna copia: apri la TV una volta"

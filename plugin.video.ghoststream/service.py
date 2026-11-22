@@ -22,7 +22,7 @@ import xbmc
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import playlist_store, progress, tv
+from resources.lib import playlist_store, progress, status, tv
 
 ADDON_ID = 'plugin.video.ghoststream'
 # Primo controllo dopo l'avvio: Kodi ha finito di caricare, la TV non e' ancora
@@ -58,6 +58,11 @@ def refresh():
     except Exception:
         log(traceback.format_exc())
         return []
+    try:
+        # La pagina Stato legge questo segno: quando e' girato e cos'ha fatto.
+        status.mark_service(renewed)
+    except playlist_store.StoreError as exc:
+        log('giro del servizio non segnato: %s' % exc)
     if renewed:
         log('rinnovati: %s' % ', '.join(renewed))
     return renewed
