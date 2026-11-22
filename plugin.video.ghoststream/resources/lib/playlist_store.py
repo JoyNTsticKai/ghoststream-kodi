@@ -55,10 +55,21 @@ def _read_json(path, default):
 
 
 def _write_json(path, data):
+    """Scrive su un file di appoggio e poi lo sposta al suo posto.
+
+    Cosi' chi legge (l'addon) non trova mai un file scritto a meta' mentre il
+    servizio in sottofondo sta aggiornando la stessa cache.
+    """
+    temporary = path + '.tmp'
     try:
-        with open(path, 'w', encoding='utf-8') as handle:
+        with open(temporary, 'w', encoding='utf-8') as handle:
             json.dump(data, handle, ensure_ascii=False, indent=1)
+        os.replace(temporary, path)
     except OSError as exc:
+        try:
+            os.remove(temporary)
+        except OSError:
+            pass
         raise StoreError('scrittura fallita: %s' % exc)
 
 

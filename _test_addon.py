@@ -150,8 +150,15 @@ def setResolvedUrl(handle, succeeded, item):
                      'content_lookup': item.content_lookup})
 
 
+END = []
+
+
+def endOfDirectory(*args, **kwargs):
+    END.append(kwargs)
+
+
 xbmcplugin.addDirectoryItem = addDirectoryItem
-xbmcplugin.endOfDirectory = lambda *args, **kwargs: None
+xbmcplugin.endOfDirectory = endOfDirectory
 xbmcplugin.setContent = lambda *args, **kwargs: None
 xbmcplugin.setResolvedUrl = setResolvedUrl
 
@@ -225,6 +232,7 @@ def run(param=''):
     ITEMS[:] = []
     RESOLVED[:] = []
     BUILTINS[:] = []
+    END[:] = []
     sys.argv = ['plugin://plugin.video.ghoststream/', '7', param]
     import default
     importlib.reload(default)
@@ -1053,5 +1061,58 @@ else:
     SETTINGS['tv_url'] = saved_tv_url
 
 tv.channels(tv_list, force=True)
+
+print('23) cartelle in cache e rinnovo in sottofondo')
+run('')
+check(END and END[-1].get('cacheToDisc') is True,
+      'la cartella resta in cache: tornando indietro non si rifa tutto')
+
+default = sys.modules['default']
+BUILTINS[:] = []
+default.redirect('plugin://plugin.video.ghoststream/?mode=tv')
+check(BUILTINS and 'mode=tv' in BUILTINS[0] and 'v=' in BUILTINS[0],
+      'la pagina ricostruita e nuova, non presa dalla cache: %s' % BUILTINS)
+check(END[-1].get('cacheToDisc') is False,
+      'la pagina di passaggio non finisce in cache')
+
+playlist_store.write_data('prova.json', {'a': 1})
+prova = os.path.join(PROFILE_ROOT, 'prova.json')
+check(playlist_store.read_data('prova.json') == {'a': 1} and
+      os.path.isfile(prova) and not os.path.exists(prova + '.tmp'),
+      'scrittura atomica: chi legge non trova mai un file a meta')
+os.remove(prova)
+
+calls = []
+original_channels, original_guide = tv.channels, tv.guide
+tv.channels = lambda url='', force=False: (calls.append('canali'), [])[1]
+tv.guide = lambda url='', force=False: (calls.append('guida'), {})[1]
+playlist_store.write_data('tv.json', {'urls': [], 'fetched': int(time.time()),
+                                     'entries': []})
+playlist_store.write_data('epg.json', {'sources': [], 'fetched': int(time.time()),
+                                      'guide': {}})
+check(tv.cache_age('tv.json') is not None and tv.cache_age('tv.json') < 60,
+      'eta della copia salvata leggibile')
+check(tv.cache_age('mai-scritto.json') is None, 'copia che non c e: eta sconosciuta')
+check(tv.warm() == [] and calls == [],
+      'con le copie fresche il servizio non scarica niente')
+playlist_store.write_data('tv.json', {'urls': [], 'fetched': 0, 'entries': []})
+playlist_store.write_data('epg.json', {'sources': [], 'fetched': 0, 'guide': {}})
+check(tv.warm() == ['canali', 'guida'], 'copie vecchie: canali e guida rinnovati')
+check(calls == ['canali', 'guida'], 'prima i canali, poi la guida')
+
+LOGS[:] = []
+import service  # noqa: E402  (il servizio importa la lib dell addon)
+service.refresh()
+check(any('servizio' in line and 'rinnovati' in line for line in LOGS),
+      'il servizio rinnova quello che serve e lo scrive nel log: %s' % LOGS[-1:])
+tv.channels, tv.guide = original_channels, original_guide
+
+addon_dir = os.path.abspath('plugin.video.ghoststream')
+with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
+    manifest = handle.read()
+check('xbmc.service' in manifest and 'library="service.py"' in manifest,
+      'il servizio e dichiarato nell addon.xml')
+check(os.path.isfile(os.path.join(addon_dir, 'service.py')),
+      'il file del servizio viaggia nello zip')
 
 print('ESITO OK')

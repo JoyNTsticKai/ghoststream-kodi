@@ -45,8 +45,15 @@ SOURCES_FILE = 'sources.json'
 BUILTIN_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     'resources', 'sources.json')
-CHANNELS_MAX_AGE = 12 * 3600
-GUIDE_MAX_AGE = 8 * 3600
+# Quanto puo' restare vecchia la copia salvata. Il rinnovo lo fa il servizio
+# dell'addon (service.py) mentre Kodi e' aperto, cosi' la pagina TV si apre
+# sempre dalla copia locale: questi due sono il limite oltre il quale, se il
+# servizio non gira da giorni, si scarica comunque invece di restare fermi.
+CHANNELS_MAX_AGE = 7 * 24 * 3600
+GUIDE_MAX_AGE = 3 * 24 * 3600
+# Eta' a cui il servizio rinnova, prima che si arrivi al limite.
+CHANNELS_REFRESH_AGE = 12 * 3600
+GUIDE_REFRESH_AGE = 6 * 3600
 DOWNLOAD_LIMIT = 12 * 1024 * 1024
 TIMEOUT = 25
 
@@ -260,6 +267,34 @@ def guide(url='', force=False):
     except playlist_store.StoreError:
         pass
     return merged
+
+
+def cache_age(name):
+    """Quanti secondi ha la copia salvata; None se non c'e' ancora."""
+    stamp = playlist_store.read_data(name).get('fetched') or 0
+    return time.time() - stamp if stamp else None
+
+
+def warm():
+    """Rinnova canali e guida che stanno invecchiando (lo chiama service.py).
+
+    E' l'unico punto che scarica senza che nessuno stia aspettando una
+    cartella di Kodi: le pagine dell'addon leggono solo la copia locale.
+    Restituisce le parti rinnovate.
+    """
+    renewed = []
+    for part, cache, age, load in (
+            ('canali', CHANNEL_CACHE, CHANNELS_REFRESH_AGE, channels),
+            ('guida', GUIDE_CACHE, GUIDE_REFRESH_AGE, guide)):
+        current = cache_age(cache)
+        if current is not None and current < age:
+            continue
+        try:
+            load(force=True)
+        except TvError:
+            continue
+        renewed.append(part)
+    return renewed
 
 
 def channel_key(value):

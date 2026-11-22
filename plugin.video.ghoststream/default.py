@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import sys
+import time
 import traceback
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -229,7 +230,9 @@ def end(content=None):
         xbmcplugin.setContent(HANDLE, content)
     log('elenco completato: %d voci' % ITEM_COUNT[0])
     ITEM_COUNT[0] = 0
-    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=False)
+    # La cartella resta in cache: tornando indietro Kodi la ridisegna invece
+    # di rifare tutto il lavoro, che su un TV box sono secondi di attesa.
+    xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=True)
     # La vista scelta (lista, icone...) resta anche dopo un aggiornamento.
     view = views.apply(sys.argv[0])
     if view:
@@ -237,15 +240,21 @@ def end(content=None):
 
 
 def redirect(target):
-    """Sostituisce la cartella corrente: la pagina del link non torna piu'."""
-    log('redirect: %s' % target)
+    """Sostituisce la cartella corrente: la pagina del link non torna piu'.
+
+    Il parametro 'v' cambia sempre, cosi' la pagina arriva appena costruita e
+    non dalla cache di Kodi: ordine nuovo e liste riscaricate si vedono subito.
+    """
+    fresh = '%s%sv=%d' % (target, '&' if '?' in target else '?',
+                          int(time.time() * 1000))
+    log('redirect: %s' % fresh)
     try:
-        xbmc.executebuiltin('Container.Update(%s)' % target)
+        xbmc.executebuiltin('Container.Update(%s)' % fresh)
     except Exception:
         log('Container.Update non disponibile')
     ITEM_COUNT[0] = 0
     xbmcplugin.endOfDirectory(HANDLE, succeeded=True, updateListing=False,
-                              cacheToDisk=False)
+                              cacheToDisc=False)
 
 
 def confirm(message):
@@ -893,6 +902,7 @@ def remove_list(list_id):
 # --------------------------------------------------------------------------
 def show_tv():
     """Canali in chiaro con logo e programma in onda, dalla lista pubblica."""
+    started = time.time()
     try:
         entries = tv.channels(setting_text('tv_url', ''))
     except tv.TvError as exc:
@@ -946,6 +956,7 @@ def show_tv():
                  page=page, group=group, extra_rows=extra, order='file',
                  order_row=False)
     end('videos')
+    log('TV: %d canali in %.2fs' % (len(entries), time.time() - started))
 
 
 def show_tv_variants():

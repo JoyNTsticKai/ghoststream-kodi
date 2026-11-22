@@ -11,7 +11,6 @@ Container.SetViewMode).
 
 import glob
 import os
-import sqlite3
 
 import xbmc
 import xbmcvfs
@@ -34,7 +33,13 @@ def database():
 
 
 def stored_view(path, skin=''):
-    """Id della vista che Kodi ha salvato per questa cartella (0 se manca)."""
+    """Id della vista che Kodi ha salvato per questa cartella (0 se manca).
+
+    sqlite3 si importa solo qui: costa tempo a ogni apertura di menu e serve
+    soltanto la prima volta che una cartella si vede.
+    """
+    import sqlite3
+
     db = database()
     if not db or not path:
         return 0
