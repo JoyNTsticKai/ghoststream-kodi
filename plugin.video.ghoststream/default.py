@@ -26,9 +26,9 @@ import xbmcplugin
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import (archive_api, favorites, hidden, local, naming,
-                           playlist, playlist_store, progress, search, status,
-                           tv, views, youtube)
+from resources.lib import (archive_api, diagnostica, dirette, favorites,
+                           hidden, local, naming, playlist, playlist_store,
+                           progress, search, status, tv, views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -172,6 +172,14 @@ LABELS = {
     30097: 'Cache di Kodi portata a 256 MB. Si cambia da Impostazioni > Servizi '
            '> Caching.',
     30098: 'Cache non modificata: si imposta da Impostazioni > Servizi > Caching.',
+    30100: 'Dirette ufficiali',
+    30101: 'I canali Rai in diretta dai flussi pubblici di RaiPlay, con il '
+           'programma in onda.',
+    30102: 'Diagnostica',
+    30103: 'Prova adesso le fonti e le impostazioni: cosa risponde e cosa no.',
+    30104: 'ok',
+    30105: 'ko',
+    30106: 'Riprova',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -589,6 +597,8 @@ def show_root():
     if setting_bool('source_tv', True):
         add_item(t(30032), url(mode='tv'), art=source_art('tv'),
                  info={'plot': t(30033), 'mediatype': 'video'})
+        add_item(t(30100), url(mode='dirette'), art=source_art('tv'),
+                 info={'plot': t(30101), 'mediatype': 'video'})
     if setting_bool('source_local', False):
         add_item(t(30002), url(mode='local', path=''), art=source_art('local'),
                  info={'plot': 'I tuoi file video, su disco o su NAS.',
@@ -596,6 +606,8 @@ def show_root():
     show_hidden_row()
     add_item(t(30081), url(mode='status'), art=source_art('tv'),
              info={'plot': t(30082), 'mediatype': 'video'})
+    add_item(t(30102), url(mode='diag'), art=source_art('search'),
+             info={'plot': t(30103), 'mediatype': 'video'})
     end()
 
 
@@ -1191,7 +1203,8 @@ def show_archive_item(identifier):
             # Una riga per puntata: le copie in altri formati stanno nel sottomenu.
             add_item(label,
                      url(mode='archive_versions', id=identifier,
-                         ep=group['episode'], s=group['season'] or ''),
+                         ep=group['episode'], s=group['season'] or '',
+                         t=group['title'] or ''),
                      art=art, info=info)
         else:
             params = {'mode': 'play', 'u': preferred['url'], 'title': title}
@@ -1201,9 +1214,10 @@ def show_archive_item(identifier):
     end('episodes')
 
 
-def show_archive_versions(identifier, episode, season=None):
+def show_archive_versions(identifier, episode, season=None, title=''):
     try:
-        files, meta = archive_api.episode_versions(identifier, episode, season)
+        files, meta = archive_api.episode_versions(identifier, episode, season,
+                                                   title)
     except archive_api.ArchiveError as exc:
         log('versioni non disponibili: %s' % exc)
         notify(t(30006), True)
@@ -1685,6 +1699,64 @@ def show_tv_variants():
     end('videos')
 
 
+def show_dirette():
+    """Dirette ufficiali Rai: flussi pubblici con il programma in onda.
+
+    I link sono quelli del relinker di RaiPlay (non si scarica niente): la
+    guida TV viene dalla stessa copia locale della sezione TV, quindi non
+    serve nessuna nuova fonte da configurare.
+    """
+    entries = dirette.entries()
+    try:
+        guide = tv.guide(setting_text('epg_url', ''))
+    except tv.TvError as exc:
+        log('guida TV non disponibile per le dirette: %s' % exc)
+        guide = {}
+    entries = tv.group_channels(tv.with_guide(entries, guide))
+    # Ordine del telecomando (Rai 1, Rai 2, Rai 3, Rai 4...) e nessuna riga
+    # "Ordine dei canali": qui l'ordine non e' una scelta.
+    show_entries(entries, page={'mode': 'dirette'}, order='number',
+                 order_row=False, track=False)
+    end('videos')
+
+
+# --------------------------------------------------------------------------
+# Diagnostica
+# --------------------------------------------------------------------------
+def show_diagnostica():
+    """Una riga per controllo, col suo esito: cosa risponde e cosa no.
+
+    Le prove sono vere (rete compresa): se una fonte ha cambiato indirizzo
+    si vede qui, senza aprire il log di Kodi. "Riprova" rifa' tutto.
+    """
+    started = time.time()
+    rows = [
+        diagnostica.archive(),
+        diagnostica.main_list(),
+        diagnostica.guide(),
+        diagnostica.channels_cached(),
+        diagnostica.dirette_official(),
+        diagnostica.youtube_addon(),
+        diagnostica.adaptive(),
+        diagnostica.local_folder(setting_text('local_path', '')),
+        diagnostica.cache(cache_size(), cache_readfactor()),
+    ]
+    for result in rows:
+        color = 'green' if result['ok'] else 'red'
+        mark = t(30104) if result['ok'] else t(30105)
+        label = '%s: [COLOR=%s]%s[/COLOR]  [COLOR=grey](%s)[/COLOR]' % (
+            result['name'], color, mark, result['detail'])
+        add_item(label, url(mode='diag'),
+                 info={'title': result['name'],
+                       'plot': '%s: %s' % (result['name'], result['detail']),
+                       'mediatype': 'video'})
+    add_item(t(30106), url(mode='diag_refresh', v=int(time.time() * 1000)),
+             art=source_art('search'), info={'plot': t(30103),
+                                             'mediatype': 'video'})
+    end('videos')
+    log('diagnostica: %d controlli in %.2fs' % (len(rows),
+                                                time.time() - started))
+
 
 # --------------------------------------------------------------------------
 # Riproduzione
@@ -1846,6 +1918,20 @@ def cache_size():
         return int(json.loads(reply)['result']['value'])
     except Exception as exc:
         log('cache non leggibile: %s' % exc)
+        return None
+
+
+def cache_readfactor():
+    """Fattore di lettura della cache (0 = 'Adattivo'); None se non risponde."""
+    try:
+        reply = xbmc.executeJSONRPC(json.dumps({
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'Settings.GetSettingValue',
+            'params': {'setting': 'filecache.readfactor'},
+        }))
+        return int(json.loads(reply)['result']['value'])
+    except Exception as exc:
+        log('fattore di lettura non leggibile: %s' % exc)
         return None
 
 
@@ -2018,7 +2104,8 @@ def main():
     elif mode == 'archive_versions':
         show_archive_versions(PARAMS.get('id', ''),
                               int(PARAMS.get('ep', 0) or 0),
-                              int(PARAMS.get('s') or 0) or None)
+                              int(PARAMS.get('s') or 0) or None,
+                              PARAMS.get('t', ''))
     elif mode == 'local':
         show_local(PARAMS.get('path', ''))
     elif mode == 'load':
@@ -2037,6 +2124,12 @@ def main():
         show_tv_variants()
     elif mode == 'tv_refresh':
         refresh_tv_and_guide(show_tv)
+    elif mode == 'dirette':
+        show_dirette()
+    elif mode == 'diag':
+        show_diagnostica()
+    elif mode == 'diag_refresh':
+        redirect(url(mode='diag'))
     elif mode == 'favorites':
         show_favorites()
     elif mode == 'favorite':

@@ -5,6 +5,7 @@ Solo libreria standard: urllib + json. Nessuna dipendenza da installare.
 """
 
 import json
+import re
 import urllib.parse
 import urllib.request
 
@@ -14,9 +15,13 @@ SEARCH_URL = 'https://archive.org/advancedsearch.php'
 METADATA_URL = 'https://archive.org/metadata/%s'
 DOWNLOAD_URL = 'https://archive.org/download/%s/%s'
 THUMB_URL = 'https://archive.org/services/img/%s'
-USER_AGENT = 'plugin.video.ghoststream/1.9.13 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.9.14 (Kodi addon)'
 
 VIDEO_EXTENSIONS = ('.mp4', '.m4v', '.webm', '.mkv', '.ogv', '.m3u8')
+
+# Titolo ridotto all'osso: due file si sommano solo se hanno lo stesso numero
+# E lo stesso titolo (vedi episode_key).
+_TITLE_KEY = re.compile(r'[^a-z0-9]+')
 
 # Copie "pesanti": chiedono piu' banda di quanta archive.org di solito ne dia a
 # un singolo collegamento (~5 Mbit/s misurati), quindi il buffer di Kodi si
@@ -178,6 +183,18 @@ def playable_files(identifier):
     return files, item_info(data)
 
 
+def episode_key(entry):
+    """Chiave di una puntata: stagione, numero e titolo.
+
+    Il solo numero non basta: due file diversi con lo stesso '013' finivano
+    nella stessa voce, uno come copia dell'altro, e il secondo spariva.
+    """
+    if not entry.get('episode'):
+        return None
+    title = _TITLE_KEY.sub('', (entry.get('title') or '').lower())
+    return (entry.get('season'), entry['episode'], title)
+
+
 def episodes(identifier):
     """Restituisce (puntate, info_item).
 
@@ -188,9 +205,7 @@ def episodes(identifier):
     groups = []
     index = {}
     for entry in files:
-        key = None
-        if entry['episode']:
-            key = (entry['season'], entry['episode'])
+        key = episode_key(entry)
         group = index.get(key) if key else None
         if group is None:
             group = {
@@ -216,13 +231,20 @@ def episodes(identifier):
     return groups, meta
 
 
-def episode_versions(identifier, episode, season=None):
-    """Le versioni di una singola puntata, quella preferita per prima."""
+def episode_versions(identifier, episode, season=None, title=''):
+    """Le versioni di una singola puntata, quella preferita per prima.
+
+    Il titolo serve quando due puntate hanno lo stesso numero: senza, il
+    sottomenu aprirebbe sempre la prima delle due.
+    """
     groups, meta = episodes(identifier)
+    wanted = _TITLE_KEY.sub('', (title or '').lower())
     for group in groups:
         if group['episode'] != episode:
             continue
         if season is not None and group['season'] != season:
+            continue
+        if wanted and _TITLE_KEY.sub('', (group['title'] or '').lower()) != wanted:
             continue
         return group['files'], meta
     return [], meta

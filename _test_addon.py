@@ -288,9 +288,9 @@ sys.modules['xbmcvfs'] = xbmcvfs
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
-from resources.lib import (archive_api, favorites, hidden, playlist,  # noqa: E402
-                           playlist_store, progress, search, status, tv,
-                           views, youtube)
+from resources.lib import (archive_api, diagnostica, dirette,  # noqa: E402
+                           favorites, hidden, playlist, playlist_store,
+                           progress, search, status, tv, views, youtube)
 
 
 def run(param=''):
@@ -318,7 +318,8 @@ SETTINGS['source_youtube'] = 'false'
 SETTINGS['source_archive'] = 'false'
 run('')
 labels = [item['label'] for item in ITEMS]
-check(labels == ['Cerca', 'Carica un link (M3U o video)', 'Stato'],
+check(labels == ['Cerca', 'Carica un link (M3U o video)', 'Stato',
+                 'Diagnostica'],
       'voce Carica nel menu, sotto Cerca: %s' % labels)
 check(ITEMS[0]['art']['thumb'].endswith('search.png'),
       'Cerca ha la sua icona')
@@ -379,7 +380,8 @@ try:
           % (len(groups), [entry['format'] for entry in groups[0]['files']]))
     check(len(groups) > 50, 'puntate raggruppate')
     check(len(groups[0]['files']) > 1, 'copie dello stesso episodio nello stesso gruppo')
-    check(len({group['episode'] for group in groups}) == len(groups), 'nessuna puntata doppia')
+    chiavi = {archive_api.episode_key(group['files'][0]) for group in groups}
+    check(len(chiavi) == len(groups), 'nessuna puntata doppia')
 except archive_api.ArchiveError as exc:
     print('  --  rete non disponibile, prova saltata: %s' % exc)
 
@@ -465,7 +467,7 @@ run('')
 labels = [item['label'] for item in ITEMS]
 print('   menu: %s' % labels)
 check(labels == ['Cerca', 'Carica un link (M3U o video)', 'La mia lista',
-                 'Stato'],
+                 'Stato', 'Diagnostica'],
       'la lista salvata compare nel menu principale')
 check(ITEMS[2]['folder'] is True, 'la lista salvata apre un elenco')
 check(ITEMS[2]['art']['thumb'] == 'http://example.com/ken.png',
@@ -1328,10 +1330,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.13 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.13 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.14 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.14 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.13"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.14"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1425,7 +1427,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.13' in handle.read(), 'addon.xml 1.9.13 anche nel file appena letto')
+    check('1.9.14' in handle.read(), 'addon.xml 1.9.14 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1694,7 +1696,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.13' in manifest, 'addon.xml 1.9.13')
+check('1.9.14' in manifest, 'addon.xml 1.9.14')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1962,5 +1964,136 @@ leggera = [item for item in ITEMS if item['label'].startswith('Leggera')][0]
 check('heavy=1' not in leggera['url'],
       'una puntata leggera non porta il segno pesante')
 Dialog.ANSWER = False
+
+print('32) dirette ufficiali Rai')
+check(len(dirette.CHANNELS) == 10,
+      'dieci canali ufficiali: %d' % len(dirette.CHANNELS))
+voci = dirette.entries()
+check(all('relinkerServlet.htm?cont=' in entry['url'] for entry in voci),
+      'ogni diretta punta al relinker Rai, non a un indirizzo che scade')
+check(all(entry['headers'].get('User-Agent') for entry in voci),
+      'il link porta il suo User-Agent: senza, il relinker risponde 403')
+numeri = [entry['number'] for entry in voci]
+check(numeri == sorted(numeri), 'numeri del telecomando in ordine: %s' % numeri)
+check(len(set(numeri)) == len(numeri), 'nessun numero doppio')
+
+adesso = int(time.time())
+tv.guide = lambda url='', force=False: {
+    'aliases': {},
+    'programmes': {'rai1': [[adesso - 600, adesso + 600, 'Uno Mattina']]},
+}
+SETTINGS['source_tv'] = 'true'
+run('')
+check('Dirette ufficiali' in [item['label'] for item in ITEMS],
+      'voce Dirette ufficiali nel menu principale')
+run('?mode=dirette')
+labels = [item['label'] for item in ITEMS]
+print('   dirette: %s' % labels)
+check(len(ITEMS) == 10, 'dieci dirette in elenco: %d' % len(ITEMS))
+check(labels[0].startswith('Rai 1') and labels[-1].startswith('Rai Sport'),
+      'ordine del telecomando, dalla prima all ultima: %s' % labels[-1])
+check('In onda:' in labels[0] and 'Uno Mattina' in labels[0],
+      'la guida si vede anche sulle dirette')
+check('relinkerServlet' in urllib.parse.unquote(ITEMS[0]['url']) and
+      'manifest_type' in urllib.parse.unquote(ITEMS[0]['url']),
+      'la voce porta il link ufficiale e il tipo di manifest')
+check(ITEMS[0]['folder'] is False, 'una diretta si apre subito')
+run('?' + urllib.parse.urlparse(ITEMS[0]['url']).query)
+check(RESOLVED[-1]['props'].get('inputstream') == 'inputstream.adaptive' and
+      RESOLVED[-1]['props'].get('inputstream.adaptive.manifest_type') == 'hls',
+      'la diretta va a inputstream.adaptive, non al demuxer: %s'
+      % RESOLVED[-1]['props'])
+
+print('33) diagnostica')
+reach_orig = diagnostica.reach
+archive_orig = archive_api.search
+chiamate = []
+
+
+def fake_reach(url, headers=None):
+    chiamate.append(url)
+    return True, 'HTTP 302'
+
+
+diagnostica.reach = fake_reach
+archive_api.search = lambda q, page=1, rows=30: ([{'identifier': 'x'}], 42)
+CACHE.update({'memorysize': 256, 'readfactor': 0, 'calls': [], 'fail': False})
+run('')
+check('Diagnostica' in [item['label'] for item in ITEMS],
+      'voce Diagnostica nel menu principale')
+run('?mode=diag')
+labels = [item['label'] for item in ITEMS]
+print('   controlli: %s' % labels)
+check(len(ITEMS) == 10, 'nove controlli piu la riga Riprova: %d' % len(ITEMS))
+check(any(label.startswith('Internet Archive: [COLOR=green]ok')
+          for label in labels), 'Internet Archive risponde')
+check(any(label.startswith('Dirette ufficiali Rai: [COLOR=green]ok')
+          for label in labels), 'le dirette ufficiali rispondono')
+check(any(label.startswith('Cache di Kodi: [COLOR=green]ok') and 'Adattivo' in label
+          for label in labels), 'cache e fattore Adattivo letti da Kodi')
+check(any('relinkerServlet' in url for url in chiamate),
+      'la prova delle dirette chiede davvero il flusso')
+check(labels[-1].startswith('Riprova'), 'in fondo la riga per riprovare')
+
+CACHE['memorysize'] = 20
+run('?mode=diag')
+check(any(label.startswith('Cache di Kodi: [COLOR=red]ko') and '20 MB' in label
+          for label in [item['label'] for item in ITEMS]),
+      'una cache da 20 MB si vede subito')
+
+
+def broken_search(*args, **kwargs):
+    raise archive_api.ArchiveError('rete assente')
+
+
+archive_api.search = broken_search
+run('?mode=diag')
+check(any('Internet Archive: [COLOR=red]ko' in item['label'] for item in ITEMS),
+      'se una fonte non risponde la riga diventa rossa')
+
+run('?mode=diag_refresh')
+check(any('mode=diag' in command for command in BUILTINS),
+      'Riprova ricostruisce la pagina da zero')
+diagnostica.reach = reach_orig
+archive_api.search = archive_orig
+CACHE.update({'memorysize': 20, 'readfactor': 400, 'calls': [], 'fail': False})
+
+print('34) due file con lo stesso numero di puntata')
+stesso = [
+    dict(FAKE[2], title='La sfida', label='013 - La sfida.mp4', episode=13,
+         url='http://example.com/13a.mp4'),
+    dict(FAKE[2], title='Il ritorno', label='013 - Il ritorno.mp4', episode=13,
+         url='http://example.com/13b.mp4'),
+]
+archive_api.playable_files = lambda identifier: (
+    [dict(entry) for entry in stesso], dict(META))
+run('?mode=archive_item&id=Ken')
+check(len(ITEMS) == 2, 'due puntate con lo stesso numero restano due: %s'
+      % [item['label'] for item in ITEMS])
+check(len({item['url'] for item in ITEMS}) == 2,
+      'due link diversi: una non e piu copia dell altra')
+
+doppie = [
+    dict(FAKE[2], title='La sfida', label='a.mp4', episode=13,
+         url='http://example.com/a.mp4'),
+    dict(FAKE[0], title='La sfida', label='a.mkv', episode=13,
+         url='http://example.com/a.mkv'),
+    dict(FAKE[2], title='Il ritorno', label='b.mp4', episode=13,
+         url='http://example.com/b.mp4'),
+    dict(FAKE[0], title='Il ritorno', label='b.mkv', episode=13,
+         url='http://example.com/b.mkv'),
+]
+archive_api.playable_files = lambda identifier: (
+    [dict(entry) for entry in doppie], dict(META))
+run('?mode=archive_item&id=Ken')
+check(len(ITEMS) == 2, 'due puntate, ognuna con le sue copie: %s'
+      % [item['label'] for item in ITEMS])
+check(all('2 versioni' in item['label'] for item in ITEMS),
+      'ognuna dichiara le sue copie')
+seconda = [item for item in ITEMS if 'Il ritorno' in item['label']][0]
+run('?' + urllib.parse.urlparse(seconda['url']).query)
+labels = [item['label'] for item in ITEMS]
+check(len(ITEMS) == 2 and all('Il ritorno' in label for label in labels),
+      'il sottomenu apre la puntata giusta, non la prima: %s' % labels)
 
 print('ESITO OK')
