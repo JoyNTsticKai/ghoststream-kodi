@@ -258,3 +258,7 @@ msgstr "Internet Archive"
 msgctxt "#30079"
 msgid "Cerca una parola"
 msgstr "Cerca una parola"
+
+msgctxt "#30080"
+msgid "Niente nei canali TV, nelle liste e nella raccolta."
+msgstr "Niente nei canali TV, nelle liste e nella raccolta."

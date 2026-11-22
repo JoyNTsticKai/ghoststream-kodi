@@ -148,6 +148,7 @@ LABELS = {
     30077: 'La mia raccolta',
     30078: 'Internet Archive',
     30079: 'Cerca una parola',
+    30080: 'Niente nei canali TV, nelle liste e nella raccolta.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -661,26 +662,14 @@ def show_search_results(query):
                          playable=True)
             found_any += len(videos)
 
-    # 4. Internet Archive (ricerca pubblica).
+    # 4. Internet Archive ha una pagina sua: la ricerca sul web puo' metterci
+    #    secondi, e chi cerca un canale o un file locale non deve aspettarla.
     if setting_bool('source_archive', True):
-        try:
-            docs, total = archive_api.search(query, page=1, rows=8)
-        except archive_api.ArchiveError as exc:
-            log('ricerca Archive non disponibile: %s' % exc)
-            docs, total = [], 0
-        if docs:
-            search_section(t(30078), len(docs), query, source_art('archive'))
-            for doc in docs:
-                identifier = doc.get('identifier')
-                if not identifier:
-                    continue
-                title = doc.get('title') or identifier
-                thumb = archive_api.thumbnail_url(identifier)
-                add_item(title, url(mode='archive_item', id=identifier),
-                         art={'thumb': thumb, 'fanart': thumb},
-                         info={'title': title, 'mediatype': 'video'})
-            add_item(t(30005), url(mode='archive_list', q=query, page=1))
-            found_any += len(docs)
+        add_item('%s: "%s"' % (t(30078), query),
+                 url(mode='archive_list', q=query, page=1),
+                 art=source_art('archive'),
+                 info={'plot': 'Film, cartoni e documentari di pubblico dominio '
+                               'o con licenza libera.', 'mediatype': 'video'})
 
     # 5. YouTube, se l'addon c'e': la ricerca la fa lui.
     if youtube.available():
@@ -688,7 +677,7 @@ def show_search_results(query):
                  info={'plot': t(30072), 'mediatype': 'video'})
 
     if not found_any:
-        notify(t(30073) % query)
+        notify(t(30080))
     end('videos')
 
 

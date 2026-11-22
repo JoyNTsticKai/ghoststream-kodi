@@ -8,7 +8,7 @@ sorgenti gia' espongono (canali TV in cache, liste salvate, file locali) e si
 passa la query alla ricerca pubblica di Internet Archive.
 """
 
-from resources.lib import local, playlist
+from resources.lib import hidden, local, playlist
 
 MAX_RESULTS = 40      # righe per provenienza, per non fare pagine infinite
 MAX_LOCAL_FILES = 400  # quanti file della raccolta si guardano al massimo
@@ -27,6 +27,15 @@ def matches(text, terms):
     return all(term in folded for term in terms)
 
 
+def visible(entry):
+    """Una voce nascosta (o dentro un gruppo nascosto) non si mostra mai."""
+    name = playlist.clean_name(entry.get('name') or '')
+    if hidden.has_channel(name):
+        return False
+    group = playlist.clean_group(entry.get('group'))
+    return not (group and hidden.has_group(group))
+
+
 def filter_entries(entries, query, limit=MAX_RESULTS):
     """Voci (canali, liste) il cui nome contiene tutte le parole cercate."""
     terms = words(query)
@@ -34,6 +43,8 @@ def filter_entries(entries, query, limit=MAX_RESULTS):
         return []
     found = []
     for entry in entries or []:
+        if not visible(entry):
+            continue
         if matches(entry.get('name') or '', terms):
             found.append(entry)
             if len(found) >= limit:

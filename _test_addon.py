@@ -1273,10 +1273,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.6 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.6 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.7 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.7 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.6"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.7"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1370,7 +1370,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.6' in handle.read(), 'addon.xml 1.9.6 anche nel file appena letto')
+    check('1.9.7' in handle.read(), 'addon.xml 1.9.7 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1537,9 +1537,15 @@ check(search.find_local('', 'ken') == [],
       'senza cartella impostata non si cerca nella raccolta')
 
 archive_original = archive_api.search
-archive_api.search = lambda q, page=1, rows=30: (
-    ([{'identifier': 'Ken', 'title': 'Ken il Guerriero'}], 1)
-    if 'ken' in (q or '').lower() else ([], 0))
+archive_calls = []
+
+
+def fake_archive(q, page=1, rows=30):
+    archive_calls.append((q, page, rows))
+    return ([{'identifier': 'Ken', 'title': 'Ken il Guerriero'}], 1)
+
+
+archive_api.search = fake_archive
 youtube_original = youtube.available
 youtube.available = lambda: True
 
@@ -1564,17 +1570,19 @@ check(any(label.startswith('Le tue liste') for label in labels),
       'sezione delle liste salvate')
 check(any(label.startswith('La mia raccolta') for label in labels),
       'sezione della raccolta locale')
-check(any(label.startswith('Internet Archive') for label in labels),
-      'sezione di Internet Archive')
+archive_rows = [item for item in ITEMS if 'mode=archive_list' in item['url']]
+check(len(archive_rows) == 1 and
+      archive_rows[0]['label'].startswith('Internet Archive'),
+      'Internet Archive ha la sua riga, senza bloccare il resto')
 check(any(label.startswith('Cerca su YouTube') for label in labels),
       'riga che passa la ricerca a YouTube')
 check(not any(label.startswith('Canali TV') for label in labels),
       'la sezione TV compare solo quando trova qualcosa')
-voce = [item for item in ITEMS if 'archive_item' in item['url'] and
-        'Ken il Guerriero' in item['label']][0]
-check(voce['folder'] is True, 'la voce di Archive apre la scheda del film')
-check(any('mode=archive_list' in item['url'] for item in ITEMS),
-      'in fondo il collegamento a tutti i risultati di Archive')
+check(archive_calls == [],
+      'la pagina dei risultati non aspetta Internet Archive: %s' % archive_calls)
+run('?' + urllib.parse.urlparse(archive_rows[0]['url']).query)
+check(archive_calls and any('Ken il Guerriero' in item['label'] for item in ITEMS),
+      'premendo la riga arrivano i risultati di Internet Archive')
 
 run('?mode=search_results&q=rai')
 labels = [item['label'] for item in ITEMS]
@@ -1587,9 +1595,40 @@ check('mode=tv_var' in rai1['url'],
 check(any('mode=favorite' in riga[1] for riga in rai1['context']),
       'e si puo aggiungere a La mia lista anche da qui')
 
+print('   canali e gruppi nascosti non tornano fuori con la ricerca')
+run('?mode=search_results&q=rai')
+prima = [item['label'].split('  [COLOR')[0] for item in ITEMS
+         if item['label'].startswith('Rai')]
+check(prima == ['Rai 1', 'Rai 2'], 'entrambi i canali nei risultati')
+run(hide_call('channel', 'Rai 1'))
+run('?mode=search_results&q=rai')
+dopo = [item['label'].split('  [COLOR')[0] for item in ITEMS
+        if item['label'].startswith('Rai')]
+check(dopo == ['Rai 2'], 'il canale nascosto non compare nei risultati')
+hidden.show(hidden.key('Rai 1'))
+run(hide_call('group', 'Rai'))
+run('?mode=search_results&q=rai')
+labels = [item['label'] for item in ITEMS]
+check(not any(label.startswith('Canali TV') for label in labels),
+      'un gruppo nascosto porta via i suoi canali anche dalla ricerca')
+check(not any(label.startswith('Rai') for label in labels),
+      'nessun canale del gruppo nascosto nei risultati')
+hidden.show(hidden.key('Rai'), 'groups')
+
+run('?mode=search_results&q=ken')
+prima = [item['label'] for item in ITEMS if item['label'].startswith('Ken - Ep')]
+check(len(prima) == 2, 'due voci della lista nei risultati')
+run(hide_call('channel', 'Ken - Ep 1'))
+run('?mode=search_results&q=ken')
+check([item['label'] for item in ITEMS if item['label'].startswith('Ken - Ep')]
+      == ['Ken - Ep 3'], 'un canale nascosto sparisce anche dai risultati delle liste')
+hidden.show(hidden.key('Ken - Ep 1'))
+
 youtube.available = lambda: False
 run('?mode=search_results&q=zzzznulla')
-check(ITEMS == [], 'senza risultati l elenco resta vuoto')
+check([item['label'].split(':')[0] for item in ITEMS] == ['Internet Archive'],
+      'senza risultati restano solo le ricerche esterne: %s'
+      % [item['label'] for item in ITEMS])
 archive_api.search = archive_original
 youtube.available = youtube_original
 run('?mode=search_results&q=')
@@ -1600,6 +1639,6 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.6' in manifest, 'addon.xml 1.9.6')
+check('1.9.7' in manifest, 'addon.xml 1.9.7')
 
 print('ESITO OK')
