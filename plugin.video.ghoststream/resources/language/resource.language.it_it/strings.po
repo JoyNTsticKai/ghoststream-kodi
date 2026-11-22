@@ -310,3 +310,7 @@ msgstr "niente da rinnovare"
 msgctxt "#30092"
 msgid "nessuna copia: apri la TV una volta"
 msgstr "nessuna copia: apri la TV una volta"
+
+msgctxt "#30093"
+msgid "Il flusso non parte: provo un'altra copia."
+msgstr "Il flusso non parte: provo un'altra copia."

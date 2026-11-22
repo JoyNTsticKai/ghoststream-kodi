@@ -64,8 +64,12 @@ def count():
     return len(load())
 
 
-def add(title, url='', extra='', art=None, plot='', kind='video'):
-    """Aggiunge (o rinnova) una voce scelta; lo stesso titolo resta uno solo."""
+def add(title, url='', extra='', art=None, plot='', kind='video', alt=''):
+    """Aggiunge (o rinnova) una voce scelta; lo stesso titolo resta uno solo.
+
+    alt sono le altre copie dello stesso canale: restano appese alla voce
+    cosi' il ripiego automatico funziona anche partendo da La mia lista.
+    """
     name = progress.key(title)
     if not name or not url:
         return None
@@ -75,6 +79,7 @@ def add(title, url='', extra='', art=None, plot='', kind='video'):
         'title': (title or '').strip(),
         'url': url,
         'extra': extra or '',
+        'alt': alt or '',
         'art': clean_art(art),
         'plot': plot or '',
         'kind': kind,

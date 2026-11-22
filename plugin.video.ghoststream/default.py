@@ -161,6 +161,7 @@ LABELS = {
     30090: '%d canali con guida',
     30091: 'niente da rinnovare',
     30092: 'nessuna copia: apri la TV una volta',
+    30093: 'Il flusso non parte: provo un\'altra copia.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -462,7 +463,8 @@ def favorite_menu(title, query, art, info):
     if not name:
         return []
     params = {'mode': 'favorite', 'k': name, 't': title,
-              'u': query.get('u', ''), 'p': query.get('p', '')}
+              'u': query.get('u', ''), 'p': query.get('p', ''),
+              'alt': query.get('alt', '')}
     thumb = (art or {}).get('thumb')
     fanart = (art or {}).get('fanart')
     # L'icona generica non e' una copertina: meglio lasciarla fuori.
@@ -478,12 +480,31 @@ def favorite_menu(title, query, art, info):
     return [(t(30053), 'RunPlugin(%s)' % url(a='add', **params))]
 
 
-def entry_url(entry):
+def alternates(entry, others=None):
+    """Le altre copie dello stesso canale (SD/HD/720p), per il ripiego."""
+    pool = entry.get('variants') if others is None else others
+    rows = []
+    for variant in pool or []:
+        target = variant.get('url')
+        if not target or target == entry.get('url'):
+            continue
+        rows.append({'url': target, 'extra': entry_extra(variant)})
+        if len(rows) >= FALLBACK_ATTEMPTS:
+            break
+    return rows
+
+
+def entry_url(entry, others=None):
     params = {'mode': 'play', 'u': entry['url'],
               'title': playlist.clean_name(entry['name'])}
     extra = entry_extra(entry)
     if extra:
         params['p'] = extra
+    # Le copie alternative viaggiano col link: se il flusso non parte, chi
+    # riproduce sa gia' cosa provare dopo, senza riaprire la lista.
+    rows = alternates(entry, others)
+    if rows:
+        params['alt'] = json.dumps(rows, separators=(',', ':'))
     return url(**params)
 
 
@@ -894,6 +915,8 @@ def show_favorites():
         params = {'mode': 'play', 'u': row.get('url') or '', 'title': title}
         if row.get('extra'):
             params['p'] = row['extra']
+        if row.get('alt'):
+            params['alt'] = row['alt']
         # Il 'Togli da La mia lista' lo aggiunge add_item: una riga sola.
         info = {'title': title, 'plot': row.get('plot') or t(30059),
                 'mediatype': 'video'}
@@ -915,7 +938,8 @@ def favorite_action():
     try:
         if action == 'add':
             favorites.add(title, PARAMS.get('u', ''), PARAMS.get('p', ''),
-                          art, PARAMS.get('pl', ''))
+                          art, PARAMS.get('pl', ''),
+                          alt=PARAMS.get('alt', ''))
             notify(t(30056))
         elif action == 'remove':
             favorites.remove(title)
@@ -1282,8 +1306,8 @@ def show_session():
 
     if not session:
         log('nessuna lista in memoria')
-        notify(t(30015), True)
-        end()
+        info_row(t(30015), url(mode='load'))
+        end('videos')
         return
 
     if session.get('autoplay') and session.get('url'):
@@ -1299,16 +1323,16 @@ def show_session():
 
     entries = session.get('entries') or []
     if not entries:
-        notify(t(30015), True)
-        end()
+        info_row(t(30015), url(mode='load'))
+        end('videos')
         return
 
     group = PARAMS.get('g')
     if group is not None:
         entries = playlist.in_group(entries, None if group == '*' else group)
         if not entries:
-            notify(t(30015), True)
-            end()
+            info_row(t(30015), url(mode='loaded'))
+            end('videos')
             return
 
     show_entries(entries, group=group)
@@ -1422,8 +1446,8 @@ def show_saved_list(list_id):
     entry = playlist_store.find(list_id)
     if not entry:
         log('lista salvata non trovata: %s' % list_id)
-        notify(t(30015), True)
-        end()
+        info_row(t(30015), url(mode='root'))
+        end('videos')
         return
 
     entries = playlist_store.entries(list_id)
@@ -1443,16 +1467,16 @@ def show_saved_list(list_id):
                 log('copia locale non aggiornata: %s' % exc)
 
     if not entries:
-        notify(t(30015), True)
-        end()
+        info_row(t(30015), url(mode='list', id=list_id))
+        end('videos')
         return
 
     group = PARAMS.get('g')
     if group is not None:
         entries = playlist.in_group(entries, None if group == '*' else group)
         if not entries:
-            notify(t(30015), True)
-            end()
+            info_row(t(30015), url(mode='list', id=list_id))
+            end('videos')
             return
 
     show_entries(entries, refresh_target=url(mode='list_refresh', id=list_id),
@@ -1550,8 +1574,8 @@ def show_tv():
     extra = []
     if only:
         if not guided:
-            notify(t(30035))
-            end()
+            info_row(t(30035), url(mode='tv'))
+            end('videos')
             return
         # Torna all'elenco completo, senza il filtro.
         extra.append((t(30037), url(**page), source_art('tv')))
@@ -1608,7 +1632,8 @@ def show_tv_variants():
         second = ''
         if variant.get('epg_next'):
             second = '%s: %s' % (t(30039), variant['epg_next'])
-        add_item(label, entry_url(variant), art=logo_art(variant.get('logo')),
+        add_item(label, entry_url(variant, channel.get('variants')),
+                 art=logo_art(variant.get('logo')),
                  info={'title': variant.get('name') or label,
                        'plot': variant.get('plot') or variant.get('url'),
                        'mediatype': 'video'},
@@ -1624,6 +1649,8 @@ MANIFEST_TYPES = (('.m3u8', 'hls'), ('.mpd', 'dash'), ('.ism', 'ism'))
 MIME_TYPES = {'hls': 'application/vnd.apple.mpegurl',
               'dash': 'application/dash+xml'}
 ADAPTIVE = 'inputstream.adaptive'
+START_WAIT = 20        # secondi per capire se il flusso e' partito
+FALLBACK_ATTEMPTS = 2  # quante copie alternative provare
 
 
 def manifest_type(target):
@@ -1759,6 +1786,72 @@ def apply_stream_props(item, target, extra):
     return target
 
 
+def read_alternates(raw):
+    """Le copie alternative arrivate col link, solo quelle da provare."""
+    if not raw:
+        return []
+    try:
+        rows = json.loads(raw)
+    except ValueError:
+        log('copie alternative illeggibili: %s' % raw[:80])
+        return []
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows
+            if isinstance(row, dict) and row.get('url')][:FALLBACK_ATTEMPTS]
+
+
+def wait_start(player, monitor, seconds=START_WAIT):
+    """True se la riproduzione parte entro qualche secondo."""
+    for _ in range(seconds):
+        if monitor.abortRequested():
+            return False
+        if player.isPlaying():
+            return True
+        if monitor.waitForAbort(1):
+            return False
+    return False
+
+
+def try_alternates(candidates, title, extra, art):
+    """Se il flusso non parte, prova da solo la copia successiva.
+
+    Si aspetta l'avvio prima di decidere (inputstream.adaptive puo' metterci
+    qualche secondo); poi si apre la copia HD/SD con lo stesso titolo e la
+    stessa copertina, cosi' la posizione continua a essere salvata.
+    """
+    monitor = xbmc.Monitor()
+    player = xbmc.Player()
+    if wait_start(player, monitor):
+        log('flusso partito: nessun ripiego')
+        return
+    for candidate in candidates:
+        if monitor.abortRequested() or player.isPlaying():
+            return
+        log('flusso non partito, provo: %s' % candidate['url'])
+        notify(t(30093))
+        item = xbmcgui.ListItem(path=candidate['url'], offscreen=True)
+        if title:
+            item.setInfo('video', {'title': title})
+        path = apply_stream_props(item, candidate['url'],
+                                  candidate.get('extra', ''))
+        item.setPath(path)
+        try:
+            player.play(item)
+        except Exception as exc:
+            log('copia alternativa non avviata: %s' % exc)
+            return
+        if title:
+            try:
+                progress.begin(title, candidate['url'],
+                               candidate.get('extra', ''), 0, art)
+            except playlist_store.StoreError as exc:
+                log('posizione non seguita: %s' % exc)
+        if wait_start(player, monitor):
+            log('copia alternativa partita: %s' % candidate['url'])
+            return
+
+
 def play(target, title='', extra=''):
     log('riproduco: %s' % target)
     source = target
@@ -1777,20 +1870,24 @@ def play(target, title='', extra=''):
     manifest = item.getProperty('inputstream.adaptive.manifest_type') or '-'
     log('player scelto: %s | manifest: %s' % (chosen, manifest))
     xbmcplugin.setResolvedUrl(HANDLE, True, item)
+    # Copertina arrivata col link: si salva con la posizione, cosi' la
+    # pagina Continua mostra il logo invece dell'icona generica.
+    art = {}
+    if PARAMS.get('at'):
+        art['thumb'] = PARAMS['at']
+    if PARAMS.get('af'):
+        art['fanart'] = PARAMS['af']
     if title:
-        # Copertina arrivata col link: si salva con la posizione, cosi' la
-        # pagina Continua mostra il logo invece dell'icona generica.
-        art = {}
-        if PARAMS.get('at'):
-            art['thumb'] = PARAMS['at']
-        if PARAMS.get('af'):
-            art['fanart'] = PARAMS['af']
         # Il servizio in sottofondo segue la riproduzione e salva la posizione:
         # questa pagina puo' chiudersi subito, la posizione non si perde.
         try:
             progress.begin(title, PARAMS.get('u') or source, extra, start, art)
         except playlist_store.StoreError as exc:
             log('posizione non seguita: %s' % exc)
+    candidates = read_alternates(PARAMS.get('alt', ''))
+    if candidates:
+        # Nessun altro lo fa per noi: se il flusso non parte, si prova qui.
+        try_alternates(candidates, title, extra, art)
 
 
 # --------------------------------------------------------------------------

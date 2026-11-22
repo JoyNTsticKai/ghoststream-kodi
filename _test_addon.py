@@ -129,7 +129,8 @@ xbmc.getCondVisibility = (lambda condition: 'inputstream.adaptive' in condition)
 
 # Riproduzione finta: il servizio la segue con track_step() e il player
 # risponde quello che gli si dice.
-PLAYER = {'playing': False, 'time': 0.0, 'total': 0.0, 'seek': []}
+PLAYER = {'playing': False, 'time': 0.0, 'total': 0.0, 'seek': [],
+          'played': []}
 
 
 class Player(object):
@@ -145,6 +146,13 @@ class Player(object):
     def seekTime(self, seconds):
         PLAYER['seek'].append(seconds)
         PLAYER['time'] = float(seconds)
+
+    def play(self, item=None, listitem=None):
+        # Il ripiego automatico apre la copia successiva da qui.
+        PLAYER['played'].append({'path': item.path if item else '',
+                                 'props': dict(item.props) if item else {},
+                                 'offset': item.getProperty('StartOffset')
+                                 if item else ''})
 
 
 class Monitor(object):
@@ -1275,10 +1283,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.9 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.9 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.10 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.10 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.9"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.10"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1372,7 +1380,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.9' in handle.read(), 'addon.xml 1.9.9 anche nel file appena letto')
+    check('1.9.10' in handle.read(), 'addon.xml 1.9.10 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1641,7 +1649,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.9' in manifest, 'addon.xml 1.9.9')
+check('1.9.10' in manifest, 'addon.xml 1.9.10')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1750,5 +1758,69 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Niente di nascosto'),
       'Voci nascoste vuota lo dice')
 check(all('v=' in item['url'] or 'mode=' in item['url'] for item in ITEMS),
       'la riga riapre la stessa pagina')
+
+print('30) ripiego sulla copia successiva')
+
+playlist_store.save_session('http://example.com/vuota.m3u', [],
+                            autoplay=False)
+run('?mode=loaded')
+check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Link non valido') and
+      'mode=load' in ITEMS[0]['url'],
+      'sessione senza voci: lo dice e riapre il caricamento: %s'
+      % [item['label'] for item in ITEMS])
+
+spenta = playlist_store.add('Spenta', 'http://example.com/spenta.m3u',
+                            entries=[])
+carica_originale = playlist.load
+
+
+def carica_spenta(*args, **kwargs):
+    raise playlist.PlaylistError('spenta')
+
+
+playlist.load = carica_spenta
+run('?mode=list&id=%s' % spenta['id'])
+playlist.load = carica_originale
+check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Link non valido') and
+      'mode=list' in ITEMS[0]['url'],
+      'lista salvata senza voci: lo dice invece di restare bianca: %s'
+      % [item['label'] for item in ITEMS])
+
+SETTINGS['source_tv'] = 'true'
+SETTINGS['tv_url'] = doppia
+run('?mode=tv_var&k=rai1')
+check(len(ITEMS) == 3, 'le tre copie di Rai 1: %d' % len(ITEMS))
+voce = '?' + ITEMS[0]['url'].split('?', 1)[1]
+copie = json.loads(urllib.parse.parse_qs(
+    urllib.parse.urlparse(voce).query)['alt'][0])
+check([row['url'] for row in copie] == ['http://example.com/rai1-hd.m3u8',
+                                        'http://example.com/rai1-720.m3u8'],
+      'la copia principale si porta dietro le altre: %s' % copie)
+
+PLAYER.update({'playing': False, 'time': 0.0, 'total': 0.0, 'seek': []})
+PLAYER['played'] = []
+run(voce)
+check([row['path'] for row in PLAYER['played']] ==
+      ['http://example.com/rai1-hd.m3u8', 'http://example.com/rai1-720.m3u8'],
+      'flusso che non parte: prova da solo HD e poi 720p: %s'
+      % [row['path'] for row in PLAYER['played']])
+
+PLAYER.update({'playing': True, 'time': 5.0, 'total': 600.0})
+PLAYER['played'] = []
+run(voce)
+check(PLAYER['played'] == [], 'se il flusso parte non si prova altro')
+
+PLAYER.update({'playing': True, 'time': 5.0, 'total': 600.0})
+run('?mode=play&u=http://example.com/uno.m3u8&title=Uno')
+check(RESOLVED and RESOLVED[-1]['path'] == 'http://example.com/uno.m3u8' and
+      PLAYER['played'] == [],
+      'una voce senza copie si riproduce e basta')
+
+import default as pagina  # noqa: E402  (ricaricato da run())
+check(pagina.read_alternates('') == [] and
+      len(pagina.read_alternates(json.dumps(
+          [{'url': 'a'}, {'url': 'b'}, {'url': 'c'}]))) == 2 and
+      pagina.read_alternates('non json') == [],
+      'le copie si fermano a due e i valori rotti si ignorano')
 
 print('ESITO OK')
