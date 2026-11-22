@@ -26,8 +26,9 @@ import xbmcplugin
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import (archive_api, favorites, local, naming, playlist,
-                           playlist_store, progress, tv, views, youtube)
+from resources.lib import (archive_api, favorites, hidden, local, naming,
+                           playlist, playlist_store, progress, tv, views,
+                           youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -126,6 +127,17 @@ LABELS = {
     30057: 'Tolto da La mia lista',
     30058: 'La mia lista e vuota: aggiungi una voce dal menu contestuale.',
     30059: 'Le voci che hai scelto, in cima al menu.',
+    30060: 'Nascondi questo canale',
+    30061: 'Nascondi il gruppo "%s"',
+    30062: 'Voci nascoste',
+    30063: 'Mostra di nuovo',
+    30064: 'Nascosto',
+    30065: 'Di nuovo visibile',
+    30066: 'Niente di nascosto.',
+    30067: 'Canali e gruppi che hai nascosto, per ritrovarli.',
+    30068: 'gruppo',
+    30069: 'canale',
+    30070: 'Mostra tutti',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -251,12 +263,14 @@ def add_item(label, target, art=None, info=None, playable=False, context=None,
         item_art.update({key: value for key, value in art.items() if value})
     item.setArt(item_art)
     if title:
-        # Cosa si puo' fare con la voce: scelta, segno di visto, Continua.
-        context = list(context or []) + favorite_menu(title, query, item_art, info)
+        # Prima le azioni della voce (scelta, segno di visto, Continua), poi
+        # quelle della pagina che la mostra (nascondi canale o gruppo).
+        own = favorite_menu(title, query, item_art, info)
         if track:
-            context += progress_menu(title, marker, query)
+            own += progress_menu(title, marker, query)
             # La copertina viaggia col link: la pagina Continua la mostrera'.
             target = with_art(target, item_art)
+        context = own + list(context or [])
     if info:
         item.setInfo('video', info)
     if playable:
@@ -369,8 +383,22 @@ def progress_menu(title, marker, query):
         rows.append((t(30045), 'RunPlugin(%s)' % url(
             mode='progress', k=name, t=title, a='watch',
             u=query.get('u', ''), p=query.get('p', ''))))
-    rows.append((t(30047), 'RunPlugin(%s)' % url(
-        mode='progress', k=name, t=title, a='forget')))
+    if marker:
+        # 'Togli da Continua' solo se c'e' una posizione da togliere.
+        rows.append((t(30047), 'RunPlugin(%s)' % url(
+            mode='progress', k=name, t=title, a='forget')))
+    return rows
+
+
+def hide_menu(title, group=''):
+    """Righe del menu contestuale per togliere di mezzo canali e gruppi."""
+    rows = []
+    if title:
+        rows.append((t(30060), 'RunPlugin(%s)' % url(
+            mode='hide', a='channel', k=hidden.key(title), t=title)))
+    if group:
+        rows.append((t(30061) % group, 'RunPlugin(%s)' % url(
+            mode='hide', a='group', k=hidden.key(group), t=group)))
     return rows
 
 
@@ -490,6 +518,7 @@ def show_root():
         add_item(t(30002), url(mode='local', path=''), art=source_art('local'),
                  info={'plot': 'I tuoi file video, su disco o su NAS.',
                        'mediatype': 'video'})
+    show_hidden_row()
     end()
 
 
@@ -513,6 +542,92 @@ def show_saved_lists():
         else:
             add_item(entry['name'], url(mode='list', id=entry['id']),
                      art=art, info=info, context=[remove])
+
+
+# --------------------------------------------------------------------------
+# Canali e gruppi nascosti
+# --------------------------------------------------------------------------
+def show_hidden_row():
+    """Riga per ritrovare quello che si e' nascosto."""
+    try:
+        total = hidden.count()
+    except playlist_store.StoreError as exc:
+        log('voci nascoste non lette: %s' % exc)
+        return
+    if not total:
+        return
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30062), total),
+             url(mode='hidden'),
+             info={'plot': t(30067), 'mediatype': 'video'})
+
+
+def hide_action():
+    """Nasconde un canale o un gruppo, poi ridisegna la pagina."""
+    action = PARAMS.get('a', '')
+    title = PARAMS.get('t', '')
+    log('nascondo %s: %s' % (action, title))
+    try:
+        if action == 'channel':
+            hidden.hide_channel(title)
+        elif action == 'group':
+            hidden.hide_group(title)
+    except playlist_store.StoreError as exc:
+        log('nascosto non salvato: %s' % exc)
+        notify(t(30015), True)
+        end()
+        return
+
+    notify(t(30064))
+    try:
+        xbmc.executebuiltin('Container.Refresh')
+    except Exception:
+        log('aggiornamento della pagina non disponibile')
+    end()
+
+
+def show_hidden():
+    """Le voci nascoste: premendone una torna visibile."""
+    try:
+        rows = ([dict(row, kind='channel') for row in hidden.channels()] +
+                [dict(row, kind='group') for row in hidden.groups()])
+    except playlist_store.StoreError as exc:
+        log('voci nascoste non lette: %s' % exc)
+        rows = []
+    if not rows:
+        notify(t(30066))
+        end()
+        return
+
+    for row in rows:
+        kind = t(30068) if row['kind'] == 'group' else t(30069)
+        label = '%s  [COLOR=grey](%s)[/COLOR]' % (row.get('title') or '', kind)
+        add_item(label, url(mode='unhide', k=row.get('key'), tipo=row['kind']),
+                 info={'title': row.get('title') or '', 'plot': t(30063),
+                       'mediatype': 'video'})
+    add_item(t(30070), url(mode='unhide', tipo='all'),
+             info={'plot': t(30063), 'mediatype': 'video'})
+    end('videos')
+
+
+def unhide_action():
+    """Rimette visibile una voce (o tutte) e riapre l'elenco dei nascosti."""
+    kind = PARAMS.get('tipo', '')
+    name = PARAMS.get('k', '')
+    try:
+        if kind == 'all':
+            hidden.clear()
+        elif kind == 'group':
+            hidden.show(name, 'groups')
+        else:
+            hidden.show(name, 'channels')
+    except playlist_store.StoreError as exc:
+        log('nascosto non aggiornato: %s' % exc)
+        notify(t(30015), True)
+        end()
+        return
+
+    notify(t(30065))
+    redirect(url(mode='hidden'))
 
 
 # --------------------------------------------------------------------------
@@ -549,12 +664,11 @@ def show_favorites():
         params = {'mode': 'play', 'u': row.get('url') or '', 'title': title}
         if row.get('extra'):
             params['p'] = row['extra']
-        remove = (t(30054), 'RunPlugin(%s)' % url(
-            mode='favorite', k=row['key'], t=title, a='remove'))
+        # Il 'Togli da La mia lista' lo aggiunge add_item: una riga sola.
         info = {'title': title, 'plot': row.get('plot') or t(30059),
                 'mediatype': 'video'}
         add_item(title, url(**params), art=row.get('art'), info=info,
-                 playable=True, context=[remove])
+                 playable=True)
     end('videos')
 
 
@@ -1009,6 +1123,12 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
             # pubbliche ('[Geo-blocked]', 'Undefined').
             label = playlist.clean_name(entry.get('name') or '')
             entry_group = playlist.clean_group(entry.get('group'))
+            if hidden.has_channel(label):
+                # Nascosto dall'utente: la lista resta, la riga no.
+                continue
+            if entry_group and hidden.has_group(entry_group):
+                continue
+            hide_rows = hide_menu(label, entry_group)
             if entry_group and group is None:
                 label += '  [COLOR=grey](%s)[/COLOR]' % entry_group
             variants = entry.get('variants') or []
@@ -1020,7 +1140,8 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
                          art=logo_art(entry['logo']),
                          info={'title': label,
                                'plot': entry.get('plot') or entry['url'],
-                               'mediatype': 'video'}, track=track)
+                               'mediatype': 'video'}, track=track,
+                         context=hide_rows)
                 continue
             label = guide_label(label, entry)
             second = ''
@@ -1030,7 +1151,8 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
                      info={'title': playlist.clean_name(entry['name']),
                            'plot': entry.get('plot') or entry['url'],
                            'mediatype': 'video'},
-                     playable=True, second=second, track=track)
+                     playable=True, second=second, track=track,
+                     context=hide_rows)
 
     if order_row:
         order_params = {'mode': 'order', 'back': url(**page), 'cur': current}
@@ -1046,16 +1168,21 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
     if refresh_target:
         add_item(t(30020), refresh_target, art=source_art('lists'))
 
+    show_hidden_row()
+
 
 def show_group_rows(entries, page):
     """Elenco dei gruppi con quanti canali, piu' la voce per vederli tutti."""
     add_item('%s  [COLOR=grey](%d)[/COLOR]' % (t(30030), len(entries)),
              url(g='*', **page), info={'mediatype': 'video'})
     for name, count in playlist.groups(entries):
+        if name and hidden.has_group(name):
+            continue
         label = name or t(30031)
         add_item('%s  [COLOR=grey](%d)[/COLOR]' % (label, count),
                  url(g=name, **page),
-                 info={'title': label, 'mediatype': 'video'})
+                 info={'title': label, 'mediatype': 'video'},
+                 context=hide_menu('', name))
 
 
 def show_saved_list(list_id):
@@ -1491,6 +1618,12 @@ def main():
         show_favorites()
     elif mode == 'favorite':
         favorite_action()
+    elif mode == 'hide':
+        hide_action()
+    elif mode == 'hidden':
+        show_hidden()
+    elif mode == 'unhide':
+        unhide_action()
     elif mode == 'continue':
         show_continue()
     elif mode == 'progress':

@@ -255,7 +255,7 @@ sys.modules['xbmcvfs'] = xbmcvfs
 sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
-from resources.lib import (archive_api, favorites, playlist,  # noqa: E402
+from resources.lib import (archive_api, favorites, hidden, playlist,  # noqa: E402
                            playlist_store, progress, tv, views)
 
 
@@ -1270,10 +1270,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.4 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.4 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.5 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.5 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.4"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.5"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1367,6 +1367,118 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.4' in handle.read(), 'addon.xml 1.9.4 anche nel file appena letto')
+    check('1.9.5' in handle.read(), 'addon.xml 1.9.5 anche nel file appena letto')
+
+print('26) menu senza doppioni, e nascondi canale e gruppo')
+favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
+              art={'thumb': 'http://example.com/poster.png'})
+run('?mode=favorites')
+scelto = [item for item in ITEMS if item['label'].startswith('Episodio con logo')][0]
+print('   menu: %s' % [riga[0] for riga in scelto['context']])
+check([riga[0] for riga in scelto['context']] ==
+      ['Togli da La mia lista', 'Segna come visto', 'Togli da Continua'],
+      'nella mia lista il menu ha tre righe, senza doppioni')
+check(len([riga for riga in scelto['context']
+           if riga[0] == 'Togli da La mia lista']) == 1,
+      'Togli da La mia lista compare una volta sola')
+
+Dialog.ANSWER = False
+Keyboard.QUEUE = [conlogo]
+run('?mode=load')
+run('?mode=loaded')
+voce = ITEMS[0]
+check([riga[0] for riga in voce['context']] ==
+      ['Togli da La mia lista', 'Segna come visto', 'Togli da Continua',
+       'Nascondi questo canale'],
+      'nella lista il menu della voce ha quattro righe: %s'
+      % [riga[0] for riga in voce['context']])
+voce_scelta = favorites.add('Altra voce', 'http://example.com/altra.mp4')
+run('?mode=loaded')
+nuova = [item for item in ITEMS if 'Altra voce' in item['label']]
+check(voce_scelta is not None and not nuova,
+      'una voce nuova entra in La mia lista senza comparire nella lista d origine')
+favorites.remove('Altra voce')
+
+
+def hide_call(azione, titolo):
+    return '?mode=hide&a=%s&k=%s&t=%s' % (
+        azione, progress.key(titolo), urllib.parse.quote(titolo))
+
+
+check(hidden.count() == 0, 'niente nascosto all inizio')
+run(hide_call('channel', 'Episodio con logo'))
+check(hidden.has_channel('Episodio con logo'), 'il canale nascosto e ricordato')
+check(any('Container.Refresh' in command for command in BUILTINS),
+      'nascondendo la voce la pagina si ridisegna')
+run('?mode=loaded')
+labels = [item['label'] for item in ITEMS]
+print('   lista: %s' % labels)
+check(not any('Episodio con logo' in label for label in labels),
+      'la voce nascosta non compare piu nel suo elenco')
+check(any(label.startswith('Voci nascoste') for label in labels),
+      'in fondo la riga per rivedere i nascosti')
+
+run('?mode=hidden')
+print('   nascosti: %s' % [item['label'] for item in ITEMS])
+check(len(ITEMS) == 2 and 'canale' in ITEMS[0]['label'] and
+      ITEMS[1]['label'].startswith('Mostra tutti'),
+      'la pagina elenca i nascosti e il comando Mostra tutti')
+run('?' + urllib.parse.urlparse(ITEMS[0]['url']).query)
+check(not hidden.has_channel('Episodio con logo'),
+      'premendo la voce torna visibile')
+check(any('mode=hidden' in command for command in BUILTINS),
+      'dopo il ripristino si riapre l elenco dei nascosti')
+run('?mode=loaded')
+check(any('Episodio con logo' in item['label'] for item in ITEMS),
+      'la voce ricompare nel suo elenco')
+
+gruppi = os.path.join(workdir, 'gruppi-nascondi.m3u')
+with open(gruppi, 'w', encoding='utf-8') as handle:
+    handle.write('#EXTM3U\n')
+    handle.write('#EXTINF:-1 group-title="Rai",Uno della Rai\n'
+                 'http://example.com/rai.mp4\n')
+    handle.write('#EXTINF:-1 group-title="Sport",Sport Uno\n'
+                 'http://example.com/sport.mp4\n')
+Keyboard.QUEUE = [gruppi]
+run('?mode=load')
+playlist_store.save_order('group')
+run('?mode=loaded')
+labels = [item['label'] for item in ITEMS]
+print('   gruppi: %s' % labels)
+check(labels[0].startswith('Tutti i canali') and labels[1].startswith('Rai') and
+      labels[2].startswith('Sport'), 'gruppi in elenco')
+riga = [item for item in ITEMS if item['label'].startswith('Sport')][0]
+check([row[0] for row in riga['context']] == ['Nascondi il gruppo "Sport"'],
+      'menu del gruppo: una riga sola')
+
+run(hide_call('group', 'Sport'))
+check(hidden.has_group('Sport'), 'il gruppo nascosto e ricordato')
+run('?mode=loaded')
+labels = [item['label'] for item in ITEMS]
+check(not any(label.startswith('Sport') for label in labels),
+      'il gruppo nascosto sparisce dall elenco')
+run('?mode=loaded&g=*')
+labels = [item['label'] for item in ITEMS]
+print('   tutti: %s' % labels)
+check(not any('Sport Uno' in label for label in labels),
+      'i canali del gruppo nascosto spariscono')
+check(any('Uno della Rai' in label for label in labels),
+      'gli altri canali restano al loro posto')
+check(any(label.startswith('Voci nascoste') for label in labels),
+      'la riga dei nascosti c e anche qui')
+
+run('?mode=unhide&tipo=group&k=%s' % hidden.key('Sport'))
+check(not hidden.has_group('Sport'), 'il gruppo torna visibile')
+playlist_store.save_order('az')
+run('?mode=loaded&g=*')
+check(any('Sport Uno' in item['label'] for item in ITEMS),
+      'tornato visibile, il canale riappare')
+
+check(hidden.key('Sport') == progress.key('sport'),
+      'gruppo e titolo usano la stessa chiave normalizzata')
+check(os.path.isfile(os.path.join(PROFILE_ROOT, 'hidden.json')),
+      'i nascosti vivono nella cartella dati')
+check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'hidden.py')),
+      'il modulo dei nascosti viaggia con l addon')
 
 print('ESITO OK')

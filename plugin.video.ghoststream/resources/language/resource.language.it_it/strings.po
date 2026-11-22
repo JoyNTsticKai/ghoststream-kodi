@@ -178,3 +178,47 @@ msgstr "La mia lista e vuota: aggiungi una voce dal menu contestuale."
 msgctxt "#30059"
 msgid "Le voci che hai scelto, in cima al menu."
 msgstr "Le voci che hai scelto, in cima al menu."
+
+msgctxt "#30060"
+msgid "Nascondi questo canale"
+msgstr "Nascondi questo canale"
+
+msgctxt "#30061"
+msgid "Nascondi il gruppo "%s""
+msgstr "Nascondi il gruppo "%s""
+
+msgctxt "#30062"
+msgid "Voci nascoste"
+msgstr "Voci nascoste"
+
+msgctxt "#30063"
+msgid "Mostra di nuovo"
+msgstr "Mostra di nuovo"
+
+msgctxt "#30064"
+msgid "Nascosto"
+msgstr "Nascosto"
+
+msgctxt "#30065"
+msgid "Di nuovo visibile"
+msgstr "Di nuovo visibile"
+
+msgctxt "#30066"
+msgid "Niente di nascosto."
+msgstr "Niente di nascosto."
+
+msgctxt "#30067"
+msgid "Canali e gruppi che hai nascosto, per ritrovarli."
+msgstr "Canali e gruppi che hai nascosto, per ritrovarli."
+
+msgctxt "#30068"
+msgid "gruppo"
+msgstr "gruppo"
+
+msgctxt "#30069"
+msgid "canale"
+msgstr "canale"
+
+msgctxt "#30070"
+msgid "Mostra tutti"
+msgstr "Mostra tutti"
