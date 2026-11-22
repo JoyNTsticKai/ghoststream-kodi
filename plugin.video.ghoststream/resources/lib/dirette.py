@@ -6,11 +6,16 @@ indirizzo firmato che scade dopo pochi minuti. Per questo si tiene solo il
 link del relinker e il flusso vero si chiede al momento della riproduzione,
 invece di salvare un indirizzo che domani non vale piu'.
 
-Il relinker risponde 403 a chi non manda un User-Agent da applicazione (anche
-a curl): le voci portano quindi l'header esplicito, che viaggia col link fino
-al player. Il link non finisce con .m3u8, percio' la voce dichiara anche il
-tipo di manifest: senza quella direttiva Kodi aprirebbe la diretta col
-demuxer predefinito, che sul live va a scatti.
+Il token che Rai mette nei segmenti e' legato allo User-Agent che ha chiesto
+il flusso: cambiando UA, i segmenti rispondono 403. Per questo le voci non
+impongono nessun header: cosi' Kodi (o inputstream.adaptive) fa manifest,
+varianti, chiavi e segmenti sempre con il suo UA, e la catena regge. Un UA
+fisso qui dentro otterrebbe il token con l'UA dell'addon e poi chiederebbe i
+segmenti con quello di Kodi: Access Denied.
+
+Il link non finisce con .m3u8, percio' la voce dichiara il tipo di manifest:
+senza quella direttiva Kodi aprirebbe la diretta col demuxer predefinito,
+che sul live va a scatti.
 """
 
 from resources.lib import playlist
@@ -32,7 +37,6 @@ CHANNELS = (
     ('Rai Sport', 58, '358025'),
 )
 
-HEADERS = {'User-Agent': playlist.USER_AGENT}
 PROPS = {'inputstream.adaptive.manifest_type': 'hls'}
 
 
@@ -40,7 +44,7 @@ def entries():
     """Le dirette nella stessa forma delle voci di una lista M3U."""
     return [{'name': name, 'url': RELINKER % content, 'logo': '',
              'group': '', 'tvg_id': name, 'number': number, 'live': True,
-             'props': dict(PROPS), 'headers': dict(HEADERS)}
+             'props': dict(PROPS), 'headers': {}}
             for name, number, content in CHANNELS]
 
 

@@ -96,8 +96,13 @@ def channels_cached():
 
 
 def dirette_official():
-    """Le dirette ufficiali Rai: il relinker deve rispondere con un rinvio."""
-    ok, detail = reach(dirette.probe_url(), dirette.HEADERS)
+    """Le dirette ufficiali Rai: il relinker deve rispondere con un rinvio.
+
+    La prova usa lo UA dell'addon, che il relinker accetta: serve solo a
+    sapere se la fonte risponde, non a preparare il flusso per il player (che
+    usa il suo UA, vedi dirette.entries).
+    """
+    ok, detail = reach(dirette.probe_url())
     return row('Dirette ufficiali Rai', ok, detail)
 
 

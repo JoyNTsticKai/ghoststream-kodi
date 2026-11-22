@@ -1336,10 +1336,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.15 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.15 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.16 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.16 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.15"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.16"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1433,7 +1433,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.15' in handle.read(), 'addon.xml 1.9.15 anche nel file appena letto')
+    check('1.9.16' in handle.read(), 'addon.xml 1.9.16 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1702,7 +1702,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.15' in manifest, 'addon.xml 1.9.15')
+check('1.9.16' in manifest, 'addon.xml 1.9.16')
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1977,8 +1977,10 @@ check(len(dirette.CHANNELS) == 10,
 voci = dirette.entries()
 check(all('relinkerServlet.htm?cont=' in entry['url'] for entry in voci),
       'ogni diretta punta al relinker Rai, non a un indirizzo che scade')
-check(all(entry['headers'].get('User-Agent') for entry in voci),
-      'il link porta il suo User-Agent: senza, il relinker risponde 403')
+check(all(not entry['headers'] for entry in voci),
+      'nessun UA fisso: il token Rai vale per lo UA che fa manifest e segmenti')
+check(all(entry['props'].get('inputstream.adaptive.manifest_type') == 'hls'
+          for entry in voci), 'e il tipo di manifest e dichiarato')
 numeri = [entry['number'] for entry in voci]
 check(numeri == sorted(numeri), 'numeri del telecomando in ordine: %s' % numeri)
 check(len(set(numeri)) == len(numeri), 'nessun numero doppio')
