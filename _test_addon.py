@@ -256,7 +256,7 @@ sys.path.insert(0, os.getcwd())
 sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
 from resources.lib import (archive_api, favorites, hidden, playlist,  # noqa: E402
-                           playlist_store, progress, tv, views)
+                           playlist_store, progress, search, tv, views, youtube)
 
 
 def run(param=''):
@@ -284,8 +284,11 @@ SETTINGS['source_youtube'] = 'false'
 SETTINGS['source_archive'] = 'false'
 run('')
 labels = [item['label'] for item in ITEMS]
-check(labels == ['Carica un link (M3U o video)'], 'voce Carica nel menu: %s' % labels)
-check(ITEMS[0]['art']['thumb'].endswith('load.png'), 'icona dedicata load.png')
+check(labels == ['Cerca', 'Carica un link (M3U o video)'],
+      'voce Carica nel menu, sotto Cerca: %s' % labels)
+check(ITEMS[0]['art']['thumb'].endswith('search.png'),
+      'Cerca ha la sua icona')
+check(ITEMS[1]['art']['thumb'].endswith('load.png'), 'icona dedicata load.png')
 
 print('2) lista locale caricata a mano')
 lista = os.path.join(workdir, 'mia lista.m3u')
@@ -407,16 +410,16 @@ check(os.path.isfile(os.path.join(PROFILE_ROOT, 'lists.json')),
 run('')
 labels = [item['label'] for item in ITEMS]
 print('   menu: %s' % labels)
-check(labels == ['Carica un link (M3U o video)', 'La mia lista'],
+check(labels == ['Cerca', 'Carica un link (M3U o video)', 'La mia lista'],
       'la lista salvata compare nel menu principale')
-check(ITEMS[1]['folder'] is True, 'la lista salvata apre un elenco')
-check(ITEMS[1]['art']['thumb'] == 'http://example.com/ken.png',
+check(ITEMS[2]['folder'] is True, 'la lista salvata apre un elenco')
+check(ITEMS[2]['art']['thumb'] == 'http://example.com/ken.png',
       'logo della prima voce come copertina')
-check(ITEMS[1]['context'] and 'list_remove' in ITEMS[1]['context'][0][1],
+check(ITEMS[2]['context'] and 'list_remove' in ITEMS[2]['context'][0][1],
       'voce Rimuovi nel menu contestuale')
 
 list_id = urllib.parse.parse_qs(
-    urllib.parse.urlparse(ITEMS[1]['url']).query)['id'][0]
+    urllib.parse.urlparse(ITEMS[2]['url']).query)['id'][0]
 run('?mode=list&id=%s' % list_id)
 print('   voci: %s' % [item['label'] for item in ITEMS])
 check(len(ITEMS) == 4, 'due canali, ordine e comando Aggiorna')
@@ -1270,10 +1273,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.5 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.5 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('1.9.6 (Kodi addon)') and
+      archive_api.USER_AGENT.endswith('1.9.6 (Kodi addon)'),
       'versione e User-Agent allineati')
-check('version="1.9.5"' in manifest, 'addon.xml alla stessa versione')
+check('version="1.9.6"' in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1367,7 +1370,7 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.5' in handle.read(), 'addon.xml 1.9.5 anche nel file appena letto')
+    check('1.9.6' in handle.read(), 'addon.xml 1.9.6 anche nel file appena letto')
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1480,5 +1483,123 @@ check(os.path.isfile(os.path.join(PROFILE_ROOT, 'hidden.json')),
       'i nascosti vivono nella cartella dati')
 check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'hidden.py')),
       'il modulo dei nascosti viaggia con l addon')
+
+print('27) canali con piu flussi anche in La mia lista')
+SETTINGS['tv_url'] = doppia
+run('?mode=tv')
+voce = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+print('   menu: %s' % [riga[0] for riga in voce['context']])
+check(voce['folder'] and voce['context'][0][0] == 'Aggiungi a La mia lista',
+      'la riga che apre il sottomenu ha comunque Aggiungi a La mia lista')
+check('mode=favorite' in voce['context'][0][1],
+      'la riga del menu e l azione sui preferiti')
+run('?' + urllib.parse.urlparse(voce['context'][0][1]).query)
+check(favorites.has('Rai 1'), 'il canale con piu flussi entra in La mia lista')
+scelto = favorites.find('Rai 1')
+check(scelto['url'] == 'http://example.com/rai1-sd.m3u8',
+      'si salva il flusso principale, non il sottomenu: %s' % scelto['url'])
+run('?mode=favorites')
+riga = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+check(riga['folder'] is False and 'mode=play' in riga['url'] and
+      'rai1-sd.m3u8' in urllib.parse.unquote(riga['url']),
+      'da La mia lista il canale parte subito dal flusso principale')
+check(riga['context'][0][0] == 'Togli da La mia lista',
+      'e da li si puo anche togliere')
+favorites.remove('Rai 1')
+if saved_tv_url is None:
+    SETTINGS.pop('tv_url', None)
+else:
+    SETTINGS['tv_url'] = saved_tv_url
+
+print('28) ricerca unificata')
+check(search.words('Citta  Rai') == ['citta', 'rai'],
+      'la ricerca ignora accenti e spazi doppi')
+check(search.matches('Citta mia', ['citta']), 'accenti ignorati nel confronto')
+check(not search.matches('Rai 1', ['rai', 'telegiornale']),
+      'servono tutte le parole cercate')
+molte = [{'name': 'Canale %d' % numero} for numero in range(50)]
+check(len(search.filter_entries(molte, 'canale')) == search.MAX_RESULTS,
+      'i risultati sono limitati per provenienza')
+check(search.filter_entries(molte, '') == [], 'una ricerca vuota non trova niente')
+
+raccolta = os.path.join(workdir, 'raccolta')
+os.makedirs(os.path.join(raccolta, 'Ken il Guerriero', 'Stagione 1'),
+            exist_ok=True)
+with open(os.path.join(raccolta, 'Ken il Guerriero', 'Stagione 1',
+                       'Episodio 01.mp4'), 'wb') as handle:
+    handle.write(b'x')
+with open(os.path.join(raccolta, 'Altro Film.mp4'), 'wb') as handle:
+    handle.write(b'x')
+check(len(search.find_local(raccolta, 'ken')) == 1,
+      'la ricerca nella raccolta apre anche le cartelle')
+check(len(search.find_local(raccolta, 'altro')) == 1, 'e trova i file in chiaro')
+check(search.find_local('', 'ken') == [],
+      'senza cartella impostata non si cerca nella raccolta')
+
+archive_original = archive_api.search
+archive_api.search = lambda q, page=1, rows=30: (
+    ([{'identifier': 'Ken', 'title': 'Ken il Guerriero'}], 1)
+    if 'ken' in (q or '').lower() else ([], 0))
+youtube_original = youtube.available
+youtube.available = lambda: True
+
+Dialog.ANSWER = True
+Keyboard.QUEUE = [ripresa, 'Ken lista']
+run('?mode=load')
+SETTINGS['source_tv'] = 'true'
+SETTINGS['source_local'] = 'true'
+SETTINGS['source_archive'] = 'true'
+SETTINGS['local_path'] = raccolta
+SETTINGS['tv_url'] = doppia
+
+Keyboard.QUEUE = ['ken']
+run('?mode=search')
+check(any('mode=search_results' in command and 'q=ken' in command
+          for command in BUILTINS),
+      'la tastiera porta alla pagina dei risultati: %s' % BUILTINS)
+run('?mode=search_results&q=ken')
+labels = [item['label'] for item in ITEMS]
+print('   risultati: %s' % labels)
+check(any(label.startswith('Le tue liste') for label in labels),
+      'sezione delle liste salvate')
+check(any(label.startswith('La mia raccolta') for label in labels),
+      'sezione della raccolta locale')
+check(any(label.startswith('Internet Archive') for label in labels),
+      'sezione di Internet Archive')
+check(any(label.startswith('Cerca su YouTube') for label in labels),
+      'riga che passa la ricerca a YouTube')
+check(not any(label.startswith('Canali TV') for label in labels),
+      'la sezione TV compare solo quando trova qualcosa')
+voce = [item for item in ITEMS if 'archive_item' in item['url'] and
+        'Ken il Guerriero' in item['label']][0]
+check(voce['folder'] is True, 'la voce di Archive apre la scheda del film')
+check(any('mode=archive_list' in item['url'] for item in ITEMS),
+      'in fondo il collegamento a tutti i risultati di Archive')
+
+run('?mode=search_results&q=rai')
+labels = [item['label'] for item in ITEMS]
+print('   risultati rai: %s' % labels)
+check(any(label.startswith('Canali TV') for label in labels),
+      'sezione dei canali TV')
+rai1 = [item for item in ITEMS if item['label'].startswith('Rai 1')][0]
+check('mode=tv_var' in rai1['url'],
+      'nei risultati il canale con piu flussi apre il sottomenu')
+check(any('mode=favorite' in riga[1] for riga in rai1['context']),
+      'e si puo aggiungere a La mia lista anche da qui')
+
+youtube.available = lambda: False
+run('?mode=search_results&q=zzzznulla')
+check(ITEMS == [], 'senza risultati l elenco resta vuoto')
+archive_api.search = archive_original
+youtube.available = youtube_original
+run('?mode=search_results&q=')
+check(ITEMS == [], 'ricerca senza parola: nessuna pagina rotta')
+
+check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
+      'il modulo della ricerca viaggia con l addon')
+check(youtube.search_url('ken') ==
+      'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
+      'la ricerca YouTube usa il percorso kodion')
+check('1.9.6' in manifest, 'addon.xml 1.9.6')
 
 print('ESITO OK')

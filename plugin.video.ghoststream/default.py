@@ -27,8 +27,8 @@ import xbmcaddon
 import xbmcvfs
 
 from resources.lib import (archive_api, favorites, hidden, local, naming,
-                           playlist, playlist_store, progress, tv, views,
-                           youtube)
+                           playlist, playlist_store, progress, search, tv,
+                           views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -138,6 +138,16 @@ LABELS = {
     30068: 'gruppo',
     30069: 'canale',
     30070: 'Mostra tutti',
+    30071: 'Cerca',
+    30072: 'Cerca in tutto: canali TV, le tue liste, la raccolta locale e '
+           'Internet Archive.',
+    30073: 'Nessun risultato per "%s".',
+    30074: 'Cerca su YouTube',
+    30075: 'Canali TV',
+    30076: 'Le tue liste',
+    30077: 'La mia raccolta',
+    30078: 'Internet Archive',
+    30079: 'Cerca una parola',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -234,7 +244,7 @@ def source_art(name):
 
 
 def add_item(label, target, art=None, info=None, playable=False, context=None,
-             second=None, track=True):
+             second=None, track=True, source=None):
     """Una voce di elenco, con il segno di visto e 'Riprendi da' se ci sono.
 
     La posizione si cerca col titolo che la riproduzione ricevera' (il
@@ -243,6 +253,13 @@ def add_item(label, target, art=None, info=None, playable=False, context=None,
     """
     info = dict(info or {})
     query = play_params(target) if playable else {}
+    if source:
+        # Riga che apre un sottomenu (TV con piu' flussi): per La mia lista
+        # vale il flusso principale, altrimenti la voce non si potrebbe salvare.
+        query = {'mode': 'play', 'u': source.get('url', ''),
+                 'title': source.get('title') or ''}
+        if source.get('extra'):
+            query['p'] = source['extra']
     title = query.get('title', '') if query.get('mode') == 'play' else ''
     # Le dirette (track=False) non hanno posizione: niente 'Riprendi da'.
     marker = progress.find(title) if (title and track) else None
@@ -497,6 +514,8 @@ def choose_order(back='', groups=False, current=''):
 def show_root():
     show_favorites_row()
     show_continue_row()
+    add_item(t(30071), url(mode='search'), art=source_art('search'),
+             info={'plot': t(30072), 'mediatype': 'video'})
     if setting_bool('source_load', True):
         add_item(t(30011), url(mode='load'), art=source_art('load'),
                  info={'plot': t(30013), 'mediatype': 'video'})
@@ -542,6 +561,135 @@ def show_saved_lists():
         else:
             add_item(entry['name'], url(mode='list', id=entry['id']),
                      art=art, info=info, context=[remove])
+
+
+# --------------------------------------------------------------------------
+# Ricerca unificata
+# --------------------------------------------------------------------------
+def show_search():
+    """Una parola sola e la ricerca guarda in tutte le sorgenti."""
+    text = ask_text(t(30079), '')
+    if not text:
+        end()
+        return
+    redirect(url(mode='search_results', q=text))
+
+
+def search_section(label, count, query, art=None):
+    """Titolo di sezione nei risultati; premendolo si rifa' la ricerca."""
+    add_item('%s  [COLOR=grey](%d)[/COLOR]' % (label, count),
+             url(mode='search_results', q=query), art=art,
+             info={'title': label, 'mediatype': 'video'})
+
+
+def show_search_results(query):
+    """Risultati divisi per provenienza, in una pagina sola."""
+    query = (query or '').strip()
+    if not query:
+        end()
+        return
+
+    found_any = 0
+
+    # 1. Canali TV (dalla copia locale, con la guida gia' scaricata).
+    if setting_bool('source_tv', True):
+        try:
+            channels = tv.group_channels(tv.channels(setting_text('tv_url', '')))
+        except tv.TvError as exc:
+            log('ricerca TV non disponibile: %s' % exc)
+            channels = []
+        hits = search.filter_entries(channels, query)
+        if hits:
+            try:
+                hits = tv.with_guide(hits, tv.guide(setting_text('epg_url', '')))
+            except tv.TvError as exc:
+                log('guida non disponibile per la ricerca: %s' % exc)
+            search_section(t(30075), len(hits), query, source_art('tv'))
+            for entry in hits:
+                name = playlist.clean_name(entry.get('name') or '')
+                variants = entry.get('variants') or []
+                info = {'title': name,
+                        'plot': entry.get('plot') or entry['url'],
+                        'mediatype': 'video'}
+                if len(variants) > 1:
+                    add_item(guide_label(name, entry),
+                             url(mode='tv_var', k=entry.get('key')),
+                             art=logo_art(entry.get('logo')), info=info,
+                             track=False,
+                             source={'title': name,
+                                     'url': variants[0]['url'],
+                                     'extra': entry_extra(variants[0])})
+                else:
+                    add_item(guide_label(name, entry), entry_url(entry),
+                             art=logo_art(entry.get('logo')), info=info,
+                             playable=True, track=False)
+            found_any += len(hits)
+
+    # 2. Le liste salvate (copia locale, nessuna pagina da aprire).
+    hits = []
+    try:
+        for saved in playlist_store.load():
+            hits.extend(search.filter_entries(
+                playlist_store.entries(saved['id']), query,
+                limit=search.MAX_RESULTS - len(hits)))
+            if len(hits) >= search.MAX_RESULTS:
+                break
+    except playlist_store.StoreError as exc:
+        log('liste non lette per la ricerca: %s' % exc)
+    if hits:
+        search_section(t(30076), len(hits), query, source_art('lists'))
+        for entry in hits:
+            name = playlist.clean_name(entry.get('name') or '')
+            add_item(name, entry_url(entry), art=logo_art(entry.get('logo')),
+                     info={'title': name,
+                           'plot': entry.get('plot') or entry['url'],
+                           'mediatype': 'video'}, playable=True)
+        found_any += len(hits)
+
+    # 3. La mia raccolta locale (cartelle comprese, senza rete).
+    if setting_bool('source_local', False):
+        videos = search.find_local(setting_text('local_path', ''), query)
+        if videos:
+            search_section(t(30077), len(videos), query, source_art('local'))
+            width = naming.number_width([item['episode'] for item in videos])
+            for item in videos:
+                label = naming.episode_label(item['episode'], item['title'], width)
+                add_item(label, url(mode='play', u=item['path'], title=label),
+                         art=item['art'],
+                         info={'title': item['title'], 'sorttitle': label,
+                               'plot': item['path'], 'mediatype': 'episode'},
+                         playable=True)
+            found_any += len(videos)
+
+    # 4. Internet Archive (ricerca pubblica).
+    if setting_bool('source_archive', True):
+        try:
+            docs, total = archive_api.search(query, page=1, rows=8)
+        except archive_api.ArchiveError as exc:
+            log('ricerca Archive non disponibile: %s' % exc)
+            docs, total = [], 0
+        if docs:
+            search_section(t(30078), len(docs), query, source_art('archive'))
+            for doc in docs:
+                identifier = doc.get('identifier')
+                if not identifier:
+                    continue
+                title = doc.get('title') or identifier
+                thumb = archive_api.thumbnail_url(identifier)
+                add_item(title, url(mode='archive_item', id=identifier),
+                         art={'thumb': thumb, 'fanart': thumb},
+                         info={'title': title, 'mediatype': 'video'})
+            add_item(t(30005), url(mode='archive_list', q=query, page=1))
+            found_any += len(docs)
+
+    # 5. YouTube, se l'addon c'e': la ricerca la fa lui.
+    if youtube.available():
+        add_item('%s: "%s"' % (t(30074), query), youtube.search_url(query),
+                 info={'plot': t(30072), 'mediatype': 'video'})
+
+    if not found_any:
+        notify(t(30073) % query)
+    end('videos')
 
 
 # --------------------------------------------------------------------------
@@ -1141,7 +1289,10 @@ def show_entries(entries, refresh_target=None, page=None, group=None,
                          info={'title': label,
                                'plot': entry.get('plot') or entry['url'],
                                'mediatype': 'video'}, track=track,
-                         context=hide_rows)
+                         context=hide_rows,
+                         source={'title': playlist.clean_name(entry.get('name')),
+                                 'url': variants[0]['url'],
+                                 'extra': entry_extra(variants[0])})
                 continue
             label = guide_label(label, entry)
             second = ''
@@ -1624,6 +1775,10 @@ def main():
         show_hidden()
     elif mode == 'unhide':
         unhide_action()
+    elif mode == 'search':
+        show_search()
+    elif mode == 'search_results':
+        show_search_results(PARAMS.get('q', ''))
     elif mode == 'continue':
         show_continue()
     elif mode == 'progress':

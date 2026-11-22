@@ -46,6 +46,11 @@ def subscriptions_url():
     return _base('subscriptions/')
 
 
+def search_url(query):
+    """Ricerca delegata all'addon YouTube (stesso percorso kodion)."""
+    return _base('kodion/search/query/?q=%s' % urllib.parse.quote(query or ''))
+
+
 def available():
     """True se l'addon plugin.video.youtube e' installato."""
     import xbmcaddon

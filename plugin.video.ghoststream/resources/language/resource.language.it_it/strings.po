@@ -222,3 +222,39 @@ msgstr "canale"
 msgctxt "#30070"
 msgid "Mostra tutti"
 msgstr "Mostra tutti"
+
+msgctxt "#30071"
+msgid "Cerca"
+msgstr "Cerca"
+
+msgctxt "#30072"
+msgid "Cerca in tutto: canali TV, le tue liste, la raccolta locale e Internet Archive."
+msgstr "Cerca in tutto: canali TV, le tue liste, la raccolta locale e Internet Archive."
+
+msgctxt "#30073"
+msgid "Nessun risultato per "%s"."
+msgstr "Nessun risultato per "%s"."
+
+msgctxt "#30074"
+msgid "Cerca su YouTube"
+msgstr "Cerca su YouTube"
+
+msgctxt "#30075"
+msgid "Canali TV"
+msgstr "Canali TV"
+
+msgctxt "#30076"
+msgid "Le tue liste"
+msgstr "Le tue liste"
+
+msgctxt "#30077"
+msgid "La mia raccolta"
+msgstr "La mia raccolta"
+
+msgctxt "#30078"
+msgid "Internet Archive"
+msgstr "Internet Archive"
+
+msgctxt "#30079"
+msgid "Cerca una parola"
+msgstr "Cerca una parola"
