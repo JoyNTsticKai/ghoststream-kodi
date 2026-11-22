@@ -18,6 +18,7 @@ import sys
 import time
 import traceback
 import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
 
 import xbmc
@@ -28,7 +29,7 @@ import xbmcvfs
 
 from resources.lib import (archive_api, diagnostica, favorites, hidden,
                            local, naming, playlist, playlist_store, progress,
-                           search, status, tv, views, youtube)
+                           search, status, tv, update, views, youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -181,6 +182,9 @@ LABELS = {
            'video si ferma dopo pochi secondi. La cache di Kodi e\' di %d MB: '
            'portarla a 256 MB aiuta. Vuoi che lo faccia ora?',
     30108: 'UFFICIALE',
+    30109: 'Nel repository c\'e la versione %s del Ghost (qui hai la %s). '
+           'La installo adesso?',
+    30110: 'Aggiornamento avviato: %s. Al termine riapri l\'addon.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -576,6 +580,45 @@ def choose_order(back='', groups=False, current=''):
         except playlist_store.StoreError as exc:
             log('ordine non salvato: %s' % exc)
     redirect(back or url(mode='loaded'))
+
+
+def check_update():
+    """Una volta ogni mezza giornata: c'e' una versione nuova nel repository?
+
+    Kodi aggiorna da solo solo se l'utente ha acceso "Aggiorna
+    automaticamente" (e dopo il suo giro): qui si guarda all'apertura e, se
+    serve, si chiede. La risposta resta in update.json, cosi' non si aspetta
+    la rete a ogni clic.
+    """
+    if not setting_bool('update_check', True):
+        return
+    if not update.due():
+        return
+
+    text = update.fetch()
+    remote = update.version_in(text, ADDON_ID) if text else ''
+    update.mark(remote)
+    if not remote:
+        log('versione online non leggibile: si riprova fra dodici ore')
+        return
+
+    current = ADDON.getAddonInfo('version') or ''
+    if not update.newer(remote, current):
+        return
+
+    log('aggiornamento disponibile: %s (installata %s)' % (remote, current))
+    if not confirm(t(30109) % (remote, current)):
+        return
+    notify(t(30110) % remote)
+    try:
+        # Prima si rilegge l'elenco del repository, poi si installa da li'.
+        # La rilettura e' un lavoro a parte: senza questa pausa l'installazione
+        # potrebbe partire con l'elenco vecchio e non trovare niente.
+        xbmc.executebuiltin('UpdateAddonRepos')
+        xbmc.sleep(1200)
+        xbmc.executebuiltin('InstallAddon(%s)' % ADDON_ID)
+    except Exception as exc:
+        log('aggiornamento non avviato: %s' % exc)
 
 
 # --------------------------------------------------------------------------
@@ -2107,6 +2150,7 @@ def main():
     log('mode=%s params=%s' % (mode, PARAMS))
 
     if mode == 'root':
+        check_update()
         show_root()
     elif mode == 'youtube':
         show_youtube()
