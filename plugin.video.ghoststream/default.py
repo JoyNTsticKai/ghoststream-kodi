@@ -29,7 +29,8 @@ import xbmcvfs
 
 from resources.lib import (archive_api, diagnostica, favorites, hidden,
                            local, naming, playlist, playlist_store, progress,
-                           search, status, tv, update, views, youtube)
+                           search, selfupdate, status, tv, update, views,
+                           youtube)
 
 ADDON = xbmcaddon.Addon()
 ADDON_ID = ADDON.getAddonInfo('id')
@@ -79,7 +80,7 @@ LABELS = {
     30008: 'Nessun file video riproducibile.',
     30009: "L'addon YouTube non risulta installato.",
     30010: "La cartella non esiste o non e' accessibile.",
-    30011: 'Carica un link (M3U o video)',
+    30011: 'Carica un link (M3U, JSON o video)',
     30012: 'Incolla il link della lista M3U/M3U8 o del video (Ctrl+V per incollare)',
     30013: "Incolla il link di una lista M3U/M3U8 o di un video: l'addon lo legge "
            'e mostra i canali o gli episodi.',
@@ -183,6 +184,31 @@ LABELS = {
            'portarla a 256 MB aiuta. Vuoi che lo faccia ora?',
     30108: 'UFFICIALE',
     30110: 'Aggiornamento avviato: %s. Al termine riapri l\'addon.',
+    30120: 'Liste JSON',
+    30121: 'Le tue liste JSON, con i gruppi, i titoli e le copertine.',
+    30122: 'Nessuna lista JSON salvata: scegli il file della lista dal disco, '
+           'oppure aggiungila dal link.',
+    30128: 'Scegli un file JSON dal disco',
+    30129: 'Si apre la scelta del file: cerca la lista salvata (.json o .txt).',
+    30130: "Aggiorna l'addon",
+    30131: 'Installa adesso la versione nuova che sta sul disco, senza passare '
+           'dagli zip di Kodi.',
+    30132: "Scegli la cartella con la versione nuova (lo zip "
+           'plugin.video.ghoststream-*.zip o la cartella stessa)',
+    30133: 'Sei gia alla versione %s: non ce niente da aggiornare.',
+    30134: 'Aggiornare dalla %s alla %s adesso?',
+    30135: 'Nessuna versione nuova in %s.',
+    30136: 'Aggiornamento non riuscito: %s',
+    30137: 'Aggiornato alla %s (%d file). Riavvio Kodi per applicarlo?',
+    30138: 'Riavvio Kodi in corso: al termine parte la versione nuova.',
+    30139: 'Reinstallare la stessa versione %s? Serve a forzare una copia '
+           'nuova dei file.',
+    30123: 'Aggiungi una lista JSON',
+    30124: '%d voci',
+    30125: '%d gruppi',
+    30126: 'Versione %s',
+    30127: 'La versione installata di Ghost-Stream: se qui leggi una versione '
+           'vecchia, lo zip nuovo non e stato installato.',
 }
 
 # Caratteri che la vista lista disegna prima di tagliare la riga: oltre,
@@ -234,6 +260,14 @@ def t(string_id):
     return text or LABELS.get(string_id, '')
 
 
+def installata():
+    """Versione dell'addon che Kodi sta eseguendo davvero."""
+    try:
+        return ADDON.getAddonInfo('version') or ''
+    except Exception:
+        return ''
+
+
 def strong(label):
     """Grassetto per i titoli delle sezioni: nel menu si staccano dal resto."""
     return '[B]%s[/B]' % label
@@ -279,6 +313,19 @@ def setting_text(key, default=''):
         return ADDON.getSettingString(key) or default
     except Exception:
         return ADDON.getSetting(key) or default
+
+
+# Vista delle cartelle scelta nelle impostazioni: '' = come la sceglie Kodi.
+VIEW_PREFERENCES = {'0': '', '1': 'covers', '2': 'list'}
+
+
+def view_preference():
+    """Cosa mostrare nelle cartelle: elenco, griglia di icone o come in Kodi."""
+    try:
+        raw = ADDON.getSetting('view_mode')
+    except Exception:
+        return ''
+    return VIEW_PREFERENCES.get(str(raw or '').strip(), '')
 
 
 def url(**params):
@@ -359,7 +406,7 @@ def end(content=None):
     # di rifare tutto il lavoro, che su un TV box sono secondi di attesa.
     xbmcplugin.endOfDirectory(HANDLE, cacheToDisc=True)
     # La vista scelta (lista, icone...) resta anche dopo un aggiornamento.
-    view = views.apply(sys.argv[0])
+    view = views.apply(sys.argv[0], view_preference())
     if view:
         log('vista riapplicata: %d' % view)
 
@@ -628,6 +675,7 @@ def show_root():
     if setting_bool('source_load', True):
         add_item(strong(t(30011)), url(mode='load'), art=source_art('load'),
                  info={'plot': t(30013), 'mediatype': 'video'})
+        show_json_row()
         show_saved_lists()
     if setting_bool('source_youtube', True):
         add_item(strong(t(30000)), url(mode='youtube'), art=source_art('youtube'),
@@ -651,6 +699,8 @@ def show_root():
              info={'plot': t(30082), 'mediatype': 'video'})
     add_item(strong(t(30102)), url(mode='diag'), art=source_art('search'),
              info={'plot': t(30103), 'mediatype': 'video'})
+    add_item(strong(t(30130)), url(mode='self_update'), art=source_art('load'),
+             info={'plot': t(30131), 'mediatype': 'video'})
     end()
 
 
@@ -677,6 +727,187 @@ def show_saved_lists():
 
 
 # --------------------------------------------------------------------------
+# Sezione JSON: liste con gruppi, titoli e copertine
+# --------------------------------------------------------------------------
+# Suffissi che valgono come lista JSON per una voce salvata senza il formato
+# segnato (playlist.JSON_EXTENSIONS invece e' altro: li' .txt si legge apposta).
+JSON_SAVED_SUFFIXES = ('.json',)
+
+
+def is_json_list(entry):
+    """La lista salvata arriva da un file JSON (formato Loop/MFP)?
+
+    Il formato si segna al salvataggio; per le liste salvate prima di questa
+    versione resta l'estensione .json come unico indizio.
+    """
+    if entry.get('kind') == 'stream':
+        return False
+    if entry.get('format'):
+        return entry['format'] == 'json'
+    path = urllib.parse.urlparse(entry.get('url') or '').path
+    return os.path.splitext(path)[1].lower() in JSON_SAVED_SUFFIXES
+
+
+def ask_folder(heading):
+    """Cartella scelta a mano (per l'aggiornamento dell'addon)."""
+    try:
+        return xbmcgui.Dialog().browse(0, heading, 'files') or ''
+    except Exception:
+        log('scelta della cartella non disponibile')
+        return ''
+
+
+def show_self_update():
+    """Installa la versione nuova che sta sul disco, senza passare dagli zip."""
+    folder = setting_text('update_folder', '')
+    if not folder or not os.path.isdir(folder):
+        folder = ask_folder(t(30132))
+        if not folder:
+            end()
+            return
+        try:
+            ADDON.setSetting('update_folder', folder)
+        except Exception:
+            log('cartella di aggiornamento non salvata')
+
+    try:
+        found = selfupdate.newest(folder)
+    except selfupdate.UpdateError as exc:
+        log('aggiornamento: %s' % exc)
+        notify(t(30136) % exc, True)
+        end()
+        return
+
+    installed = installata()
+    if not found:
+        notify(t(30135) % folder, True)
+        end()
+        return
+
+    version, source, kind = found
+    if update.parse(version) < update.parse(installed):
+        notify(t(30133) % installed)
+        end()
+        return
+    if version == installed:
+        # Stessa versione: si puo' comunque forzare, senza toccare il numero.
+        if not confirm(t(30139) % installed):
+            end()
+            return
+    elif not confirm(t(30134) % (installed, version)):
+        end()
+        return
+
+    try:
+        written = selfupdate.install(source, kind, ADDON_PATH)
+    except selfupdate.UpdateError as exc:
+        log('aggiornamento non riuscito: %s' % exc)
+        notify(t(30136) % exc, True)
+        end()
+        return
+
+    log('aggiornato alla %s: %d file scritti' % (version, written))
+    if confirm(t(30137) % (version, written)):
+        notify(t(30138))
+        if not selfupdate.restart():
+            notify(t(30138), True)
+    end()
+
+
+def show_json_row():
+    """Riga del menu principale: le liste JSON hanno una sezione loro."""
+    try:
+        total = len([entry for entry in playlist_store.load()
+                     if is_json_list(entry)])
+    except playlist_store.StoreError as exc:
+        log('liste JSON non lette: %s' % exc)
+        total = 0
+    label = strong(t(30120))
+    if total:
+        label += '  [COLOR=grey](%d)[/COLOR]' % total
+    add_item(label, url(mode='json'), art=source_art('lists'),
+             info={'plot': t(30121), 'mediatype': 'video'})
+
+
+def show_json():
+    """Le liste JSON salvate, con quante voci e quanti gruppi hanno."""
+    try:
+        items = [entry for entry in playlist_store.load()
+                 if is_json_list(entry)]
+    except playlist_store.StoreError as exc:
+        log('liste JSON non lette: %s' % exc)
+        items = []
+
+    if not items:
+        # Senza liste la riga spiega e apre subito la scelta del file: sul
+        # telecomando scrivere un percorso a mano e' un supplizio.
+        info_row(t(30122), url(mode='json_file'))
+        add_item(strong(t(30123)), url(mode='load'), art=source_art('load'),
+                 info={'plot': t(30013), 'mediatype': 'video'})
+        end('videos')
+        return
+
+    for entry in items:
+        entries = playlist_store.entries(entry['id'])
+        groups = len([name for name, _ in playlist.groups(entries) if name])
+        parts = [t(30124) % len(entries)] if entries else []
+        if groups:
+            parts.append(t(30125) % groups)
+        label = entry['name']
+        if parts:
+            label += '  [COLOR=grey](%s)[/COLOR]' % ' \u00b7 '.join(parts)
+        remove = (t(30021),
+                  'RunPlugin(%s)' % url(mode='list_remove', id=entry['id']))
+        info = {'title': entry['name'], 'plot': entry.get('url') or '',
+                'mediatype': 'video'}
+        add_item(label, url(mode='list', id=entry['id']),
+                 art=logo_art(entry.get('logo')) or source_art('lists'),
+                 info=info, context=[remove])
+
+    add_item(t(30128), url(mode='json_file'), art=source_art('load'),
+             info={'plot': t(30129), 'mediatype': 'video'})
+    add_item(strong(t(30123)), url(mode='load'), art=source_art('load'),
+             info={'plot': t(30122), 'mediatype': 'video'})
+    end('videos')
+
+
+def add_json_file():
+    """Sceglie dal disco il file di una lista JSON e la salva tra le sorgenti."""
+    # La scelta parte dalla cartella dell'ultimo file usato, se era locale.
+    start = setting_text('m3u_url', '')
+    if start and not re.match(r'^[a-z][a-z0-9+.-]*://', start, re.I):
+        start = os.path.dirname(start)
+    try:
+        path = xbmcgui.Dialog().browse(1, t(30128), 'files', '.json|.txt',
+                                       False, False, start)
+    except Exception:
+        log('scelta del file non disponibile')
+        end()
+        return
+    if not path:
+        end()
+        return
+
+    try:
+        result = playlist.load(path)
+    except playlist.PlaylistError as exc:
+        log('lista scelta non caricata (%s): %s' % (path, exc))
+        notify(t(30015), True)
+        end()
+        return
+    if result['stream'] or not result['entries']:
+        log('il file scelto non e una lista: %s' % path)
+        notify(t(30015), True)
+        end()
+        return
+
+    ask_save(path, entries=result['entries'],
+             name=result.get('name') or '', logo=result.get('logo') or '',
+             fmt=result.get('format') or '')
+    redirect(url(mode='json'))
+
+
+# --------------------------------------------------------------------------
 # Stato delle copie locali
 # --------------------------------------------------------------------------
 def show_status():
@@ -692,6 +923,10 @@ def show_status():
         return
 
     page = url(mode='status')
+    # Versione installata: sta con le altre informazioni tecniche, non in mezzo
+    # alle scelte delle liste.
+    add_item(t(30126) % installata(), page,
+             info={'plot': t(30127), 'mediatype': 'video'})
     if canali['streams']:
         label = '%s: %s  [COLOR=grey](%s)[/COLOR]' % (
             t(30083), t(30089) % (canali['channels'], canali['streams']),
@@ -1396,7 +1631,11 @@ def show_load():
         autoplay = True
     else:
         entries = result['entries']
-        ask_save(result['url'], entries=entries)
+        # Nome e copertina della lista, quando il file li dichiara (liste JSON):
+        # la riga del menu principale si presenta da sola.
+        ask_save(result['url'], entries=entries,
+                 name=result.get('name') or '', logo=result.get('logo') or '',
+                 fmt=result.get('format') or '')
         autoplay = False
 
     try:
@@ -1455,16 +1694,18 @@ def show_session():
     end('videos')
 
 
-def ask_save(target, kind='list', entries=None, props=None, headers=None):
+def ask_save(target, kind='list', entries=None, props=None, headers=None,
+             name='', logo='', fmt=''):
     """Tiene il link tra le sorgenti permanenti, con un nome scelto dall'utente."""
     if not confirm(t(30018)):
         return None
-    name = ask_text(t(30017), suggest_name(target)) or suggest_name(target)
+    preset = name or suggest_name(target)
+    name = ask_text(t(30017), preset) or preset
     try:
         saved = playlist_store.add(name, target, kind=kind,
-                                   logo=first_logo(entries or []),
+                                   logo=logo or first_logo(entries or []),
                                    entries=entries, props=props,
-                                   headers=headers)
+                                   headers=headers, fmt=fmt)
     except playlist_store.StoreError as exc:
         log('lista non salvata: %s' % exc)
         notify(t(30015), True)
@@ -2167,6 +2408,12 @@ def main():
         show_local(PARAMS.get('path', ''))
     elif mode == 'load':
         show_load()
+    elif mode == 'json':
+        show_json()
+    elif mode == 'json_file':
+        add_json_file()
+    elif mode == 'self_update':
+        show_self_update()
     elif mode == 'loaded':
         show_session()
     elif mode == 'list':

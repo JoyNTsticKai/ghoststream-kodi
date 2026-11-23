@@ -13,6 +13,13 @@ import tempfile
 import time
 import types
 import urllib.parse
+import xml.etree.ElementTree as ET
+
+# La versione si legge da addon.xml: e' quel file che finisce negli zip, mentre
+# un numero scritto qui a mano invecchierebbe senza che nessuno se ne accorga.
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+VERSION = ET.parse(os.path.join(ROOT_DIR, 'plugin.video.ghoststream',
+                                'addon.xml')).getroot().get('version')
 
 try:
     # Le etichette TV contengono la freccia del 'Dopo': la console Windows
@@ -36,6 +43,7 @@ SETTINGS = {
     'tv_url': '',
     'epg_url': '',
     'update_check': 'false',
+    'view_mode': '0',
 }
 
 PROFILE = 'special://profile/addon_data/plugin.video.ghoststream/'
@@ -106,9 +114,14 @@ class Dialog(object):
     SELECT = -1
     OPTIONS = []
     ASKED = []
+    NOTICES = []
+    BROWSE = ''
 
     def notification(self, *args, **kwargs):
-        pass
+        Dialog.NOTICES.append(args)
+
+    def browse(self, *args, **kwargs):
+        return Dialog.BROWSE
 
     def yesno(self, *args, **kwargs):
         # La domanda sulla cache si ricorda: la prova guarda cosa e' stato chiesto.
@@ -238,7 +251,7 @@ class Addon(object):
         return {
             'id': 'plugin.video.ghoststream',
             'name': 'Cartoni',
-            'version': '1.9.21',
+            'version': VERSION,
             'path': os.path.abspath('plugin.video.ghoststream'),
             'profile': PROFILE,
         }.get(key, '')
@@ -276,7 +289,8 @@ def translatePath(path):
         'special://profile/addon_data/plugin.video.ghoststream/',
         PROFILE_ROOT).replace(
         'special://profile/addon_data/plugin.video.cartonitalia',
-        os.path.join(PROFILE_ROOT, 'plugin.video.cartonitalia'))
+        os.path.join(PROFILE_ROOT, 'plugin.video.cartonitalia')).replace(
+        'special://home/addons', os.path.join(workdir, 'addons'))
 
 
 xbmcvfs.translatePath = translatePath
@@ -292,8 +306,8 @@ sys.path.insert(0, os.path.join(os.getcwd(), 'plugin.video.ghoststream'))
 
 from resources.lib import (archive_api, diagnostica, dirette,  # noqa: E402
                            favorites, hidden, playlist, playlist_store,
-                           progress, search, status, tv, update, views,
-                           youtube)
+                           progress, search, selfupdate, status, tv, update,
+                           views, youtube)
 
 # I canali ufficiali Rai stanno dentro la TV in chiaro: nelle prove con le
 # liste finte si spengono, e si riaccendono nella sezione 32, che prova la
@@ -327,12 +341,33 @@ SETTINGS['source_youtube'] = 'false'
 SETTINGS['source_archive'] = 'false'
 run('')
 labels = [item['label'] for item in ITEMS]
-check(labels == ['[B]Cerca[/B]', '[B]Carica un link (M3U o video)[/B]',
-                 '[B]Stato[/B]', '[B]Diagnostica[/B]'],
-      'voce Carica nel menu, sotto Cerca: %s' % labels)
+versione = 'Versione %s' % VERSION
+check(labels == ['[B]Cerca[/B]',
+                 '[B]Carica un link (M3U, JSON o video)[/B]',
+                 '[B]Liste JSON[/B]', '[B]Stato[/B]', '[B]Diagnostica[/B]',
+                 "[B]Aggiorna l'addon[/B]"],
+      'voce Carica, Liste JSON e Aggiorna nel menu: %s' % labels)
+check(ITEMS[-1]['folder'] is True and 'mode=self_update' in ITEMS[-1]['url'],
+      'la voce Aggiorna l addon c e ed e raggiungibile')
 check(ITEMS[0]['art']['thumb'].endswith('search.png'),
       'Cerca ha la sua icona')
 check(ITEMS[1]['art']['thumb'].endswith('load.png'), 'icona dedicata load.png')
+check(ITEMS[2]['art']['thumb'].endswith('lists.png') and
+      'mode=json' in ITEMS[2]['url'], 'la voce Liste JSON ha la sua icona')
+
+run('?mode=status')
+check(ITEMS[0]['label'] == versione,
+      'la versione installata sta nella pagina Stato: %s'
+      % [item['label'] for item in ITEMS])
+
+run('?mode=json')
+labels = [item['label'] for item in ITEMS]
+check(any('Nessuna lista JSON' in label for label in labels) and
+      'mode=json_file' in ITEMS[0]['url'] and
+      'Aggiungi una lista JSON' in ITEMS[-1]['label'],
+      'senza liste la sezione spiega e offre il file da scegliere: %s'
+      % labels)
+run('')
 
 print('2) lista locale caricata a mano')
 lista = os.path.join(workdir, 'mia lista.m3u')
@@ -476,17 +511,19 @@ check(os.path.isfile(os.path.join(PROFILE_ROOT, 'lists.json')),
 run('')
 labels = [item['label'] for item in ITEMS]
 print('   menu: %s' % labels)
-check(labels == ['[B]Cerca[/B]', '[B]Carica un link (M3U o video)[/B]',
-                 'La mia lista', '[B]Stato[/B]', '[B]Diagnostica[/B]'],
-      'la lista salvata compare nel menu principale')
-check(ITEMS[2]['folder'] is True, 'la lista salvata apre un elenco')
-check(ITEMS[2]['art']['thumb'] == 'http://example.com/ken.png',
+check(labels == ['[B]Cerca[/B]',
+                 '[B]Carica un link (M3U, JSON o video)[/B]',
+                 '[B]Liste JSON[/B]', 'La mia lista', '[B]Stato[/B]',
+                 '[B]Diagnostica[/B]', "[B]Aggiorna l'addon[/B]"],
+      'la lista salvata compare nel menu principale: %s' % labels)
+check(ITEMS[3]['folder'] is True, 'la lista salvata apre un elenco')
+check(ITEMS[3]['art']['thumb'] == 'http://example.com/ken.png',
       'logo della prima voce come copertina')
-check(ITEMS[2]['context'] and 'list_remove' in ITEMS[2]['context'][0][1],
+check(ITEMS[3]['context'] and 'list_remove' in ITEMS[3]['context'][0][1],
       'voce Rimuovi nel menu contestuale')
 
 list_id = urllib.parse.parse_qs(
-    urllib.parse.urlparse(ITEMS[2]['url']).query)['id'][0]
+    urllib.parse.urlparse(ITEMS[3]['url']).query)['id'][0]
 run('?mode=list&id=%s' % list_id)
 print('   voci: %s' % [item['label'] for item in ITEMS])
 check(len(ITEMS) == 4, 'due canali, ordine e comando Aggiorna')
@@ -1005,12 +1042,19 @@ connection.commit()
 connection.close()
 check(views.database().endswith('ViewModes6.db'), 'database delle viste trovato')
 check(views.stored_view(radice) == 66036, 'vista scelta letta dal database di Kodi')
+check(views.clean(66036) == 500, 'il flag che Kodi mette nella vista si toglie')
 BUILTINS[:] = []
-check(views.apply(radice) == 66036 and
-      'Container.SetViewMode(66036)' in BUILTINS,
-      'vista riapplicata alla cartella')
-check(playlist_store.read_data('views.json').get(radice) == 66036,
-      'vista copiata nella cartella dati dell addon')
+check(views.apply(radice) == 500 and
+      'Container.SetViewMode(500)' in BUILTINS,
+      'la vista si applica col solo id, non col flag di Kodi: %s' % BUILTINS)
+check(views.pending() == {'path': radice, 'view': 500},
+      'al servizio resta la vista da riapplicare: %s' % views.pending())
+BUILTINS[:] = []
+check(views.apply_pending('plugin://plugin.video.ghoststream') == 500 and
+      'Container.SetViewMode(500)' in BUILTINS and views.pending() == {},
+      'il servizio la applica quando la cartella e proprio quella aperta')
+check(playlist_store.read_data('views.json').get(radice) == 500,
+      'la copia locale si allinea alla vista di Kodi, senza il flag')
 connection = sqlite3.connect(dbpath)
 connection.execute('update view set viewMode=50 where path=?', (radice,))
 connection.commit()
@@ -1351,10 +1395,10 @@ progress.reset()
 check(progress.get('vecchia') is None,
       'le posizioni di due mesi fa vengono scartate')
 
-check(playlist.USER_AGENT.endswith('1.9.21 (Kodi addon)') and
-      archive_api.USER_AGENT.endswith('1.9.21 (Kodi addon)'),
+check(playlist.USER_AGENT.endswith('%s (Kodi addon)' % VERSION) and
+      archive_api.USER_AGENT.endswith('%s (Kodi addon)' % VERSION),
       'versione e User-Agent allineati')
-check('version="1.9.21"' in manifest, 'addon.xml alla stessa versione')
+check(('version="%s"' % VERSION) in manifest, 'addon.xml alla stessa versione')
 with open(os.path.join(addon_dir, 'service.py'), encoding='utf-8') as handle:
     servizio = handle.read()
 check('progress.track_step' in servizio and 'threading' in servizio,
@@ -1448,7 +1492,8 @@ check(len(ITEMS) == 1 and ITEMS[0]['label'].startswith('Doppione'),
 check(os.path.isfile(os.path.join(PROFILE_ROOT, 'favorites.json')),
       'La mia lista vive nella cartella dati, non nei setting')
 with open(os.path.join(addon_dir, 'addon.xml'), encoding='utf-8') as handle:
-    check('1.9.21' in handle.read(), 'addon.xml 1.9.21 anche nel file appena letto')
+    check(VERSION in handle.read(),
+          'addon.xml %s anche nel file appena letto' % VERSION)
 
 print('26) menu senza doppioni, e nascondi canale e gruppo')
 favorites.add('Episodio con logo', 'http://example.com/logo.mp4',
@@ -1717,7 +1762,7 @@ check(os.path.isfile(os.path.join(addon_dir, 'resources', 'lib', 'search.py')),
 check(youtube.search_url('ken') ==
       'plugin://plugin.video.youtube/kodion/search/query/?q=ken',
       'la ricerca YouTube usa il percorso kodion')
-check('1.9.21' in manifest, 'addon.xml 1.9.21')
+check(VERSION in manifest, 'addon.xml %s' % VERSION)
 
 print('29) pagina Stato')
 check(status.age_text(None) == 'mai', 'copia assente: mai')
@@ -1755,14 +1800,16 @@ check(giro['when'] > 0 and giro['renewed'] == ['canali'],
 run('?mode=status')
 labels = [item['label'] for item in ITEMS]
 print('   stato: %s' % labels)
-check(len(ITEMS) == 4, 'quattro righe: canali, guida, servizio, rinnova')
-check(labels[0].startswith('Canali TV: 2 canali (3 flussi)') and
-      'copia di 2 h' in labels[0], 'riga dei canali con eta della copia')
-check(labels[1].startswith('Guida TV: 2 canali con guida') and
-      'copia di 5 min' in labels[1], 'riga della guida con eta della copia')
-check(labels[2].startswith('Ultimo rinnovo del servizio') and
-      'canali' in labels[2], 'riga dell ultimo rinnovo del servizio')
-check(labels[3] == 'Rinnova ora' and 'mode=status_refresh' in ITEMS[3]['url'],
+check(len(ITEMS) == 5,
+      'cinque righe: versione, canali, guida, servizio, rinnova')
+check(labels[0] == versione, 'la versione installata apre la pagina Stato')
+check(labels[1].startswith('Canali TV: 2 canali (3 flussi)') and
+      'copia di 2 h' in labels[1], 'riga dei canali con eta della copia')
+check(labels[2].startswith('Guida TV: 2 canali con guida') and
+      'copia di 5 min' in labels[2], 'riga della guida con eta della copia')
+check(labels[3].startswith('Ultimo rinnovo del servizio') and
+      'canali' in labels[3], 'riga dell ultimo rinnovo del servizio')
+check(labels[4] == 'Rinnova ora' and 'mode=status_refresh' in ITEMS[4]['url'],
       'pulsante Rinnova ora')
 
 chiamate = []
@@ -1772,7 +1819,7 @@ tv.guide = lambda url='', force=False: (chiamate.append(('guida', force)), {})[1
 run('?mode=status_refresh')
 check(chiamate == [('canali', True), ('guida', True)],
       'Rinnova ora forza canali e guida: %s' % chiamate)
-check(len(ITEMS) == 4 and ITEMS[0]['label'].startswith('Canali TV'),
+check(len(ITEMS) == 5 and ITEMS[1]['label'].startswith('Canali TV'),
       'e ridisegna la pagina Stato, senza passare da una pagina vuota')
 check(not any('Container.Update' in command for command in BUILTINS),
       'niente rimandi altrove: la pagina si costruisce qui: %s' % BUILTINS)
@@ -1798,9 +1845,10 @@ playlist_store.write_data(tv.GUIDE_CACHE, {'sources': [], 'fetched': 0,
                                            'guide': {}})
 run('?mode=status')
 labels = [item['label'] for item in ITEMS]
-check(labels[0].startswith('Canali TV: nessuna copia') and
-      labels[1].startswith('Guida TV: nessuna copia'),
-      'senza copie la pagina lo dice: %s' % labels[:2])
+check(labels[0] == versione and
+      labels[1].startswith('Canali TV: nessuna copia') and
+      labels[2].startswith('Guida TV: nessuna copia'),
+      'senza copie la pagina lo dice: %s' % labels[:3])
 
 run('')
 check(any(item['label'] == '[B]Stato[/B]' for item in ITEMS),
@@ -2217,5 +2265,281 @@ SETTINGS['update_check'] = 'false'
 Dialog.ASKED = []
 run('')
 check(Dialog.ASKED == [], 'con il controllo spento non chiede niente')
+
+print('36) liste JSON con gruppi, titoli e copertine')
+prova_json = {
+    'name': 'Film di prova',
+    'image': 'http://example.com/copertina.jpg',
+    'groups': [
+        {'name': 'Azione', 'stations': [
+            {'name': 'Il Lupo', 'image': 'http://example.com/lupo.png',
+             'url': 'http://example.com/lupo.mp4'}]},
+        {'name': 'Commedia', 'stations': [
+            {'name': 'Risate', 'image': 'http://example.com/risate.png',
+             'url': 'http://example.com/risate.mp4'}]},
+    ],
+}
+json_lista = os.path.join(workdir, 'lista-json.txt')
+with open(json_lista, 'w', encoding='utf-8') as handle:
+    json.dump(prova_json, handle)
+
+risultato = playlist.load(json_lista)
+check(risultato['stream'] is False and len(risultato['entries']) == 2,
+      'il JSON con i gruppi e una lista, non un flusso: %s'
+      % risultato['entries'])
+check(risultato['name'] == 'Film di prova' and
+      risultato['logo'] == 'http://example.com/copertina.jpg',
+      'nome e copertina letti dalla intestazione')
+check([(voce['name'], voce['group'], voce['logo'])
+       for voce in risultato['entries']] ==
+      [('Il Lupo', 'Azione', 'http://example.com/lupo.png'),
+       ('Risate', 'Commedia', 'http://example.com/risate.png')],
+      'ogni voce porta il suo gruppo e la sua copertina')
+check(set(risultato['entries'][0]) ==
+      set(playlist.parse('#EXTM3U\n#EXTINF:-1,A\nhttp://x/y.mp4\n')[0]),
+      'stesse chiavi di una voce M3U: il resto dell addon le tratta uguale')
+
+Dialog.ANSWER = False
+playlist_store.save_order('az')
+Keyboard.QUEUE = [json_lista]
+run('?mode=load')
+run('?mode=loaded')
+print('   voci: %s' % [item['label'] for item in ITEMS])
+check(len(ITEMS) == 3 and ITEMS[0]['label'] ==
+      'Il Lupo  [COLOR=grey](Azione)[/COLOR]',
+      'la lista JSON si apre come una M3U, con i gruppi')
+check([item['art']['thumb'] for item in ITEMS[:2]] ==
+      ['http://example.com/lupo.png', 'http://example.com/risate.png'],
+      'le copertine arrivano alle voci in elenco')
+check(ITEMS[0]['folder'] is False and
+      'u=http://example.com/lupo.mp4' in urllib.parse.unquote(ITEMS[0]['url']),
+      'le voci della lista JSON sono riproducibili')
+
+senza_gruppi_json = os.path.join(workdir, 'senza-gruppi.json')
+with open(senza_gruppi_json, 'w', encoding='utf-8') as handle:
+    json.dump({'name': 'Non una lista', 'items': []}, handle)
+flusso_json = playlist.load(senza_gruppi_json)
+check(flusso_json['stream'] is True and flusso_json['entries'] == [],
+      'un JSON senza groups resta un flusso, non una lista vuota')
+check(playlist.parse_json_list('{"items": []}') is None,
+      'parse_json_list non inventa voci senza groups')
+
+print('37) sezione Liste JSON e vista a icone')
+Dialog.ANSWER = True
+Keyboard.QUEUE = [json_lista, 'Film di prova']
+run('?mode=load')
+salvata = [item for item in playlist_store.load()
+           if item['name'] == 'Film di prova']
+check(bool(salvata) and salvata[0].get('format') == 'json',
+      'la lista JSON si salva col suo formato: %s' % salvata)
+
+run('')
+labels = [item['label'] for item in ITEMS]
+riga = [item for item in ITEMS if 'Liste JSON' in item['label']]
+check(bool(riga) and 'mode=json' in riga[0]['url'],
+      'il menu principale ha la voce Liste JSON: %s' % labels)
+
+run('?mode=json')
+labels = [item['label'] for item in ITEMS]
+check(any('Film di prova' in label for label in labels) and
+      any('2 voci' in label for label in labels),
+      'la sezione elenca le liste JSON con le loro voci: %s' % labels)
+voce = [item for item in ITEMS if 'Film di prova' in item['label']][0]
+check('mode=list' in voce['url'] and
+      voce['art']['thumb'] == 'http://example.com/copertina.jpg',
+      'la riga apre la lista e porta la sua copertina')
+check('Aggiungi una lista JSON' in ITEMS[-1]['label'] and
+      'mode=load' in ITEMS[-1]['url'],
+      'dalla sezione si aggiunge una lista nuova: %s' % labels)
+
+# Scelta del file dal disco: niente percorso da scrivere col telecomando.
+scelta = os.path.join(workdir, 'scelta.json')
+with open(scelta, 'w', encoding='utf-8') as handle:
+    json.dump({'name': 'Scelta dal disco', 'image': 'http://example.com/s.png',
+               'groups': [{'name': 'Uno', 'stations': [
+                   {'name': 'Prima', 'image': 'http://example.com/p.png',
+                    'url': 'http://example.com/p.mp4'}]}]}, handle)
+Dialog.BROWSE = scelta
+Dialog.ANSWER = True
+Keyboard.QUEUE = ['Scelta dal disco']
+run('?mode=json_file')
+scelte = [item for item in playlist_store.load()
+          if item['name'] == 'Scelta dal disco']
+check(bool(scelte) and scelte[0].get('format') == 'json',
+      'il file scelto dal disco si salva col suo formato: %s' % scelte)
+run('?mode=json')
+check(any('Scelta dal disco' in item['label'] for item in ITEMS),
+      'e compare nella sezione Liste JSON: %s'
+      % [item['label'] for item in ITEMS])
+
+mod = sys.modules['default']
+check(not mod.is_json_list({'url': 'http://example.com/lista.txt',
+                            'kind': 'list'}),
+      'un .txt senza formato segnato non passa per lista JSON')
+check(mod.is_json_list({'url': 'http://example.com/x', 'kind': 'list',
+                        'format': 'json'}) and
+      mod.is_json_list({'url': 'http://example.com/lista.json',
+                        'kind': 'list'}),
+      'vale il formato segnato, e .json resta il solo ripiego')
+check(not mod.is_json_list({'url': 'http://example.com/x.json',
+                            'kind': 'stream'}),
+      'un video singolo non e una lista JSON')
+
+# La vista scelta a mano vince sempre, anche con "Icone" nelle impostazioni.
+SETTINGS['view_mode'] = '1'
+BUILTINS[:] = []
+run('')
+check('Container.SetViewMode(50)' in BUILTINS and
+      'Container.SetViewMode(52)' not in BUILTINS,
+      'la vista scelta a mano vince sulla griglia: %s' % BUILTINS)
+
+# Senza nessuna scelta salvata, le icone sono la vista di partenza.
+playlist_store.write_data('views.json', {})
+BUILTINS[:] = []
+run('')
+check('Container.SetViewMode(52)' in BUILTINS,
+      'prima apertura: si parte dalla griglia di copertine: %s' % BUILTINS)
+check(playlist_store.read_data('views.json') == {},
+      'la vista di partenza non viene spacciata per una scelta')
+
+playlist_store.write_data('views.json', {})
+SETTINGS['view_mode'] = '2'
+BUILTINS[:] = []
+run('')
+check('Container.SetViewMode(50)' in BUILTINS,
+      'con la scelta elenco si parte dall elenco: %s' % BUILTINS)
+
+playlist_store.write_data('views.json', {})
+SETTINGS['view_mode'] = '0'
+BUILTINS[:] = []
+run('')
+check(not any('SetViewMode' in command for command in BUILTINS),
+      'con "Come in Kodi" non si tocca niente: %s' % BUILTINS)
+
+
+def finta_skin(nome, views_elenco):
+    """Una skin finta che dichiara le sue viste, come fa Kodi davvero."""
+    folder = os.path.join(workdir, 'addons', nome, 'xml')
+    if not os.path.isdir(folder):
+        os.makedirs(folder)
+    with open(os.path.join(folder, 'MyVideoNav.xml'), 'w',
+              encoding='utf-8') as handle:
+        handle.write('<window><views>%s</views></window>' % views_elenco)
+
+
+finta_skin('skin.muro', '50,51,55,500')
+check(views.default_view('covers', 'skin.muro') == 500,
+      'skin senza la 52: si usa la sua griglia (500)')
+finta_skin('skin.povera', '50,55')
+check(views.default_view('covers', 'skin.povera') == 0 and
+      views.default_view('list', 'skin.povera') == 50,
+      'skin con i soli elenchi: nessuna griglia inventata')
+
+# Confluence tiene gli xml in 1080p/, non in xml/: le viste si leggono lo stesso.
+cartella = os.path.join(workdir, 'addons', 'skin.confluence', '1080p')
+if not os.path.isdir(cartella):
+    os.makedirs(cartella)
+with open(os.path.join(cartella, 'MyVideoNav.xml'), 'w',
+          encoding='utf-8') as handle:
+    handle.write('<window><views>50,51,500,550,551,560,501,508,504,503,515,'
+                 '505,511</views></window>')
+check(views.default_view('covers', 'skin.confluence') == 500,
+      'skin con gli xml in 1080p (Confluence): la sua griglia e la 500')
+check(views.default_view('list', 'skin.confluence') == 50,
+      'e l elenco e la 50')
+
+# Skin senza icone: non si impone niente e si avvisa una volta sola.
+finta_skin('skin.test', '50,55')
+playlist_store.write_data('views.json', {})
+SETTINGS['view_mode'] = '1'
+Dialog.NOTICES[:] = []
+BUILTINS[:] = []
+run('')
+check(not any('SetViewMode' in command for command in BUILTINS) and
+      len(Dialog.NOTICES) == 1,
+      'skin senza icone: nessuna vista imposta, un avviso: %s'
+      % Dialog.NOTICES)
+run('')
+check(len(Dialog.NOTICES) == 1, 'l avviso non si ripete a ogni cartella')
+SETTINGS['view_mode'] = '0'
+
+print('38) aggiornamento dell addon dal disco')
+import zipfile as _zipfile
+cartella_agg = os.path.join(workdir, 'aggiornamenti')
+if not os.path.isdir(cartella_agg):
+    os.makedirs(cartella_agg)
+
+
+def fai_zip(nome, versione, identificativo='plugin.video.ghoststream'):
+    percorso = os.path.join(cartella_agg, nome)
+    with _zipfile.ZipFile(percorso, 'w') as archivio:
+        archivio.writestr('%s/addon.xml' % identificativo,
+                          '<?xml version="1.0"?><addon id="%s" '
+                          'version="%s"/>' % (identificativo, versione))
+        archivio.writestr('%s/prova.txt' % identificativo, 'ciao')
+    return percorso
+
+
+fai_zip('plugin.video.ghoststream-9.9.9.zip', '9.9.9')
+fai_zip('plugin.video.ghoststream-9.9.10.zip', '9.9.10')
+fai_zip('un-altro-addon-9.9.99.zip', '9.9.99', 'altro.addon')
+trovata = selfupdate.newest(cartella_agg)
+check(trovata and trovata[0] == '9.9.10' and trovata[2] == 'zip',
+      'vince la versione piu alta, non l ultimo file: %s' % (trovata,))
+
+destinazione = os.path.join(workdir, 'addon-installato')
+if not os.path.isdir(destinazione):
+    os.makedirs(destinazione)
+scritti = selfupdate.install(trovata[1], trovata[2], destinazione)
+check(scritti == 2 and
+      os.path.isfile(os.path.join(destinazione, 'addon.xml')) and
+      os.path.isfile(os.path.join(destinazione, 'prova.txt')),
+      'i file finiscono al posto giusto, senza la cartella di contorno: %d'
+      % scritti)
+
+cartella_nuda = os.path.join(cartella_agg, 'plugin.video.ghoststream')
+if not os.path.isdir(os.path.join(cartella_nuda, 'resources')):
+    os.makedirs(os.path.join(cartella_nuda, 'resources'))
+with open(os.path.join(cartella_nuda, 'addon.xml'), 'w',
+          encoding='utf-8') as handle:
+    handle.write('<?xml version="1.0"?><addon id="plugin.video.ghoststream" '
+                 'version="9.9.11"/>')
+with open(os.path.join(cartella_nuda, 'resources', 'x.txt'), 'w',
+          encoding='utf-8') as handle:
+    handle.write('nuovo')
+check(selfupdate.newest(cartella_agg)[:1] == ('9.9.11',) and
+      selfupdate.newest(cartella_agg)[2] == 'cartella',
+      'vale anche la cartella dell addon, se e piu nuova dello zip')
+destinazione2 = os.path.join(workdir, 'addon-installato-2')
+if not os.path.isdir(destinazione2):
+    os.makedirs(destinazione2)
+check(selfupdate.install(cartella_nuda, 'cartella', destinazione2) == 2 and
+      os.path.isfile(os.path.join(destinazione2, 'resources', 'x.txt')),
+      'la cartella si copia intera, sottocartelle comprese')
+
+# Una versione piu vecchia non deve toccare niente (ne far ripartire Kodi).
+vecchi = os.path.join(workdir, 'aggiornamenti-vecchi')
+if not os.path.isdir(vecchi):
+    os.makedirs(vecchi)
+with _zipfile.ZipFile(os.path.join(
+        vecchi, 'plugin.video.ghoststream-0.0.1.zip'), 'w') as archivio:
+    archivio.writestr('plugin.video.ghoststream/addon.xml',
+                      '<?xml version="1.0"?><addon '
+                      'id="plugin.video.ghoststream" version="0.0.1"/>')
+SETTINGS['update_folder'] = vecchi
+Dialog.NOTICES[:] = []
+BUILTINS[:] = []
+run('?mode=self_update')
+check(any('gia alla versione' in str(avviso) for avviso in Dialog.NOTICES),
+      'una versione vecchia non si installa: %s' % Dialog.NOTICES)
+check(not any('RestartApp' in command for command in BUILTINS),
+      'e Kodi non riparte per niente')
+
+SETTINGS['update_folder'] = ''
+Dialog.BROWSE = ''
+Dialog.NOTICES[:] = []
+run('?mode=self_update')
+check(ITEMS == [] and Dialog.NOTICES == [],
+      'senza cartella scelta non si fa niente e non si rompe')
 
 print('ESITO OK')

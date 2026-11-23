@@ -7,6 +7,10 @@
     <setting id="source_local" type="bool" label="Mostra la mia raccolta locale" default="false"/>
   </category>
 
+  <category label="Vista">
+    <setting id="view_mode" type="enum" label="Vista di partenza delle cartelle (poi vale sempre quella che scegli a mano in Kodi)" lvalues="Come in Kodi|Icone (griglia con le copertine)|Elenco di testo" default="1"/>
+  </category>
+
   <category label="TV in chiaro">
     <setting id="source_tv" type="bool" label="Mostra TV in chiaro nel menu" default="true"/>
     <setting id="tv_url" type="text" label="Lista canali M3U (vuoto = lista italiana pubblica iptv-org)" default=""/>
@@ -18,7 +22,8 @@
   </category>
 
   <category label="Aggiornamenti">
-    <setting id="update_check" type="bool" label="All'apertura installa da solo la versione nuova dal repository (una volta ogni 12 ore)" default="true"/>
+    <setting id="update_folder" type="folder" label="Cartella dove tieni la versione nuova dell'addon (lo zip plugin.video.ghoststream-*.zip o la cartella stessa) - la usa la voce &quot;Aggiorna l'addon&quot; del menu" default="" source="auto"/>
+    <setting id="update_check" type="bool" label="All'apertura installa da solo la versione nuova dal repository GitHub (una volta ogni 12 ore)" default="true"/>
   </category>
 
   <category label="Liste e link">

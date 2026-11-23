@@ -128,7 +128,7 @@ def save_entries(list_id, entries, logo=None):
 
 
 def add(name, target, kind='list', logo='', entries=None, props=None,
-        headers=None):
+        headers=None, fmt=''):
     """Aggiunge o sostituisce una sorgente (stesso link = stessa voce)."""
     list_id = make_id(target)
     items = [item for item in load() if item.get('id') != list_id]
@@ -140,6 +140,9 @@ def add(name, target, kind='list', logo='', entries=None, props=None,
         'logo': logo or '',
         'updated': int(time.time()),
     }
+    # Formato della lista: serve alla sezione Liste JSON per ritrovare le sue.
+    if fmt:
+        item['format'] = fmt
     # Direttive della lista (#KODIPROP, header) valgono anche da menu.
     if props:
         item['props'] = dict(props)

@@ -7,20 +7,27 @@ flusso (che viene riprodotto cosi' com'e', senza scaricarlo).
 
 Solo testo M3U standard: righe #EXTINF (nome dopo l'ultima virgola, attributi
 tvg-name / tvg-logo / group-title) e l'URL che segue.
+
+Si accettano anche le liste JSON del formato "Loop"/MFP: un file con nome,
+immagine di copertina e gruppi di voci (nome, immagine, URL). Sono le stesse
+voci dell'M3U, quindi finiscono nello stesso elenco con gruppi e copertine.
 """
 
+import json
 import os
 import re
 import unicodedata
 import urllib.parse
 import urllib.request
 
-USER_AGENT = 'plugin.video.ghoststream/1.9.21 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.9.24 (Kodi addon)'
 
 PLAYLIST_EXTENSIONS = ('.m3u', '.m3u8')
 # Con l'estensione di un video non si legge nulla: si riproduce e basta.
 DIRECT_EXTENSIONS = ('.mp4', '.m4v', '.mkv', '.webm', '.avi', '.mov', '.mpg',
                      '.mpeg', '.ts', '.m2ts', '.mpd')
+# Liste JSON (formato "Loop"/MFP): un file solo, ma con tutte le voci dentro.
+JSON_EXTENSIONS = ('.json', '.txt')
 
 PLAYLIST_LIMIT = 8 * 1024 * 1024   # una lista lunga sta abbondantemente qui
 SNIFF_LIMIT = 256 * 1024           # per i link senza estensione
@@ -275,6 +282,55 @@ def parse(text):
     return entries
 
 
+def _looks_json(text):
+    """Il primo carattere utile e' una graffa: puo' essere una lista JSON."""
+    return (text or '').lstrip('\ufeff \t\r\n').startswith('{')
+
+
+def parse_json_list(text):
+    """Legge una lista JSON "Loop"/MFP; None se il testo non lo e'.
+
+    Forma: {"name": ..., "image": ..., "groups": [{"name": ...,
+    "stations": [{"name": ..., "image": ..., "url": ...}]}]}
+    Le voci escono con lo stesso schema di quelle M3U: nome, immagine, gruppo
+    e URL, cosi' il resto dell'addon le tratta allo stesso modo.
+    """
+    try:
+        data = json.loads(text or '')
+    except ValueError:
+        return None
+    groups = data.get('groups') if isinstance(data, dict) else None
+    if not isinstance(groups, list):
+        return None
+
+    entries = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        group_name = group.get('name') or ''
+        for station in group.get('stations') or []:
+            if not isinstance(station, dict):
+                continue
+            url = (station.get('url') or '').strip()
+            if not url:
+                continue
+            entries.append({
+                'name': clean_name(station.get('name') or ''),
+                'url': url,
+                'logo': (station.get('image') or '').strip(),
+                'group': clean_group(group_name),
+                'tvg_id': '',
+                'number': 0,
+                'live': is_live(url, group_name),
+                'props': {},
+                'headers': {},
+            })
+
+    return {'name': (data.get('name') or '').strip(),
+            'logo': (data.get('image') or '').strip(),
+            'entries': entries}
+
+
 def load(raw, timeout=25):
     """Restituisce {'stream': bool, 'entries': list, 'url': str}.
 
@@ -290,10 +346,26 @@ def load(raw, timeout=25):
         return {'stream': True, 'entries': [], 'url': target,
                 'props': {}, 'headers': {}}
 
-    limit = PLAYLIST_LIMIT if extension in PLAYLIST_EXTENSIONS else SNIFF_LIMIT
+    limit = (PLAYLIST_LIMIT if extension in PLAYLIST_EXTENSIONS + JSON_EXTENSIONS
+             else SNIFF_LIMIT)
     text = decode(_read(target, limit, timeout=timeout))
     if not text.strip():
         raise PlaylistError('lista vuota')
+
+    # Liste JSON: un file solo con tutte le voci. Un link senza estensione si
+    # legge prima per un assaggio: se e' JSON si rilegge intero, altrimenti
+    # l'elenco arriverebbe troncato a meta'.
+    if _looks_json(text):
+        if limit < PLAYLIST_LIMIT:
+            text = decode(_read(target, PLAYLIST_LIMIT, timeout=timeout))
+        parsed = parse_json_list(text)
+        if parsed is not None:
+            if not parsed['entries']:
+                raise PlaylistError('nessuna voce nella lista')
+            return {'stream': False, 'entries': parsed['entries'],
+                    'url': target, 'props': {}, 'headers': {},
+                    'name': parsed['name'], 'logo': parsed['logo'],
+                    'format': 'json'}
 
     upper = text.upper()
     # Playlist HLS (segmenti o varianti): e' un flusso, non un elenco.

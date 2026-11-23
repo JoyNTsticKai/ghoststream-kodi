@@ -52,8 +52,8 @@ msgid "La cartella non esiste o non e' accessibile."
 msgstr "La cartella non esiste o non e' accessibile."
 
 msgctxt "#30011"
-msgid "Carica un link (M3U o video)"
-msgstr "Carica un link (M3U o video)"
+msgid "Carica un link (M3U, JSON o video)"
+msgstr "Carica un link (M3U, JSON o video)"
 
 msgctxt "#30012"
 msgid "Incolla il link della lista M3U/M3U8 o del video (Ctrl+V per incollare)"
@@ -385,3 +385,83 @@ msgstr ""
 "Internet Archive a volte serve piano: con la cache piccola il video si "
 "ferma dopo pochi secondi. La cache di Kodi e' di %d MB: portarla a 256 MB "
 "aiuta. Vuoi che lo faccia ora?"
+
+msgctxt "#30120"
+msgid "Liste JSON"
+msgstr "Liste JSON"
+
+msgctxt "#30121"
+msgid "Le tue liste JSON, con i gruppi, i titoli e le copertine."
+msgstr "Le tue liste JSON, con i gruppi, i titoli e le copertine."
+
+msgctxt "#30122"
+msgid "Nessuna lista JSON salvata: scegli il file della lista dal disco, oppure aggiungila dal link."
+msgstr "Nessuna lista JSON salvata: scegli il file della lista dal disco, oppure aggiungila dal link."
+
+msgctxt "#30123"
+msgid "Aggiungi una lista JSON"
+msgstr "Aggiungi una lista JSON"
+
+msgctxt "#30124"
+msgid "%d voci"
+msgstr "%d voci"
+
+msgctxt "#30125"
+msgid "%d gruppi"
+msgstr "%d gruppi"
+
+msgctxt "#30126"
+msgid "Versione %s"
+msgstr "Versione %s"
+
+msgctxt "#30127"
+msgid "La versione installata di Ghost-Stream: se qui leggi una versione vecchia, lo zip nuovo non e stato installato."
+msgstr "La versione installata di Ghost-Stream: se qui leggi una versione vecchia, lo zip nuovo non e stato installato."
+
+msgctxt "#30128"
+msgid "Scegli un file JSON dal disco"
+msgstr "Scegli un file JSON dal disco"
+
+msgctxt "#30129"
+msgid "Si apre la scelta del file: cerca la lista salvata (.json o .txt)."
+msgstr "Si apre la scelta del file: cerca la lista salvata (.json o .txt)."
+
+msgctxt "#30130"
+msgid "Aggiorna l'addon"
+msgstr "Aggiorna l'addon"
+
+msgctxt "#30131"
+msgid "Installa adesso la versione nuova che sta sul disco, senza passare dagli zip di Kodi."
+msgstr "Installa adesso la versione nuova che sta sul disco, senza passare dagli zip di Kodi."
+
+msgctxt "#30132"
+msgid "Scegli la cartella con la versione nuova (lo zip plugin.video.ghoststream-*.zip o la cartella stessa)"
+msgstr "Scegli la cartella con la versione nuova (lo zip plugin.video.ghoststream-*.zip o la cartella stessa)"
+
+msgctxt "#30133"
+msgid "Sei gia alla versione %s: non ce niente da aggiornare."
+msgstr "Sei gia alla versione %s: non ce niente da aggiornare."
+
+msgctxt "#30134"
+msgid "Aggiornare dalla %s alla %s adesso?"
+msgstr "Aggiornare dalla %s alla %s adesso?"
+
+msgctxt "#30135"
+msgid "Nessuna versione nuova in %s."
+msgstr "Nessuna versione nuova in %s."
+
+msgctxt "#30136"
+msgid "Aggiornamento non riuscito: %s"
+msgstr "Aggiornamento non riuscito: %s"
+
+msgctxt "#30137"
+msgid "Aggiornato alla %s (%d file). Riavvio Kodi per applicarlo?"
+msgstr "Aggiornato alla %s (%d file). Riavvio Kodi per applicarlo?"
+
+msgctxt "#30138"
+msgid "Riavvio Kodi in corso: al termine parte la versione nuova."
+msgstr "Riavvio Kodi in corso: al termine parte la versione nuova."
+
+msgctxt "#30139"
+msgid "Reinstallare la stessa versione %s? Serve a forzare una copia nuova dei file."
+msgstr "Reinstallare la stessa versione %s? Serve a forzare una copia nuova dei file."

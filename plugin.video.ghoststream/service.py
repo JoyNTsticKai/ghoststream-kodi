@@ -22,7 +22,7 @@ import xbmc
 import xbmcaddon
 import xbmcvfs
 
-from resources.lib import playlist_store, progress, status, tv
+from resources.lib import playlist_store, progress, status, tv, views
 
 ADDON_ID = 'plugin.video.ghoststream'
 # Primo controllo dopo l'avvio: Kodi ha finito di caricare, la TV non e' ancora
@@ -32,6 +32,9 @@ FIRST_WAIT = 30
 EVERY = 3 * 3600
 # Ogni quanto il secondo filo guarda la riproduzione in corso.
 POLL = 5
+# Ogni quanto il terzo filo guarda se c'e' una vista da applicare: la cartella
+# dell'addon va disegnata prima, altrimenti Kodi ignora il cambio di vista.
+VIEW_POLL = 0.4
 
 
 def log(message):
@@ -81,12 +84,29 @@ def watcher():
             log(traceback.format_exc())
 
 
+def view_watcher():
+    """Applica la vista chiesta dall'addon appena la cartella e' quella giusta."""
+    monitor = xbmc.Monitor()
+    while not monitor.abortRequested():
+        if monitor.waitForAbort(VIEW_POLL):
+            return
+        try:
+            applicata = views.apply_pending(
+                xbmc.getInfoLabel('Container.FolderPath'))
+            if applicata:
+                log('vista %d applicata alla cartella aperta' % applicata)
+        except Exception:
+            log(traceback.format_exc())
+
+
 def main():
     playlist_store.set_root(profile_path())
-    # Il filo delle posizioni parte subito: serve anche prima del primo rinnovo.
-    thread = threading.Thread(target=watcher, name='ghoststream-position')
-    thread.daemon = True
-    thread.start()
+    # I fili partono subito: le posizioni e le viste servono prima del rinnovo.
+    for target, name in ((watcher, 'ghoststream-position'),
+                         (view_watcher, 'ghoststream-view')):
+        thread = threading.Thread(target=target, name=name)
+        thread.daemon = True
+        thread.start()
 
     monitor = xbmc.Monitor()
     wait = FIRST_WAIT
