@@ -203,6 +203,14 @@ LABELS = {
     30138: 'Riavvio Kodi in corso: al termine parte la versione nuova.',
     30139: 'Reinstallare la stessa versione %s? Serve a forzare una copia '
            'nuova dei file.',
+    30140: 'Ultimo controllo',
+    30141: 'Versione online',
+    30142: 'Prossimo controllo',
+    30143: "Aggiornamento automatico: quando l'addon ha guardato il repository "
+           'GitHub, che versione ha trovato e quando riprova (ogni mezz ora se '
+           'il giro e andato bene, dopo 15 minuti se la rete non ha risposto).',
+    30144: 'non leggibile',
+    30145: 'mai',
     30123: 'Aggiungi una lista JSON',
     30124: '%d voci',
     30125: '%d gruppi',
@@ -628,7 +636,7 @@ def choose_order(back='', groups=False, current=''):
 
 
 def check_update():
-    """Una volta ogni mezza giornata: c'e' una versione nuova nel repository?
+    """Ogni mezz'ora al massimo: c'e' una versione nuova nel repository?
 
     Kodi aggiorna da solo solo se l'utente ha acceso "Aggiorna
     automaticamente" (e dopo il suo giro): qui si guarda all'apertura e, se
@@ -642,9 +650,11 @@ def check_update():
 
     text = update.fetch()
     remote = update.version_in(text, ADDON_ID) if text else ''
-    update.mark(remote)
+    # ok=False quando la rete non risponde o addons.xml non si legge: cosi'
+    # il prossimo tentativo arriva dopo un quarto d'ora, non fra dodici ore.
+    update.mark(remote, ok=bool(remote))
     if not remote:
-        log('versione online non leggibile: si riprova fra dodici ore')
+        log('versione online non leggibile: si riprova fra quindici minuti')
         return
 
     current = ADDON.getAddonInfo('version') or ''
@@ -927,6 +937,18 @@ def show_status():
     # alle scelte delle liste.
     add_item(t(30126) % installata(), page,
              info={'plot': t(30127), 'mediatype': 'video'})
+
+    # Aggiornamento automatico: quando ha guardato il repository, che versione
+    # ha trovato e quando riprova. Tre righe per capire al volo se il giro e'
+    # passato o se e' rimasto indietro.
+    giro = update.report()
+    vista = giro['seen'] or (t(30144) if not giro['ok'] else t(30145))
+    add_item('%s: %s' % (t(30140), giro['checked_text']), page,
+             info={'plot': t(30143), 'mediatype': 'video'})
+    add_item('%s: %s' % (t(30141), vista), page,
+             info={'plot': t(30143), 'mediatype': 'video'})
+    add_item('%s: %s' % (t(30142), giro['next_text']), page,
+             info={'plot': t(30143), 'mediatype': 'video'})
     if canali['streams']:
         label = '%s: %s  [COLOR=grey](%s)[/COLOR]' % (
             t(30083), t(30089) % (canali['channels'], canali['streams']),

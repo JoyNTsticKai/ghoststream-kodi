@@ -1797,19 +1797,26 @@ giro = status.service_run()
 check(giro['when'] > 0 and giro['renewed'] == ['canali'],
       'il giro del servizio resta scritto nella cartella dati')
 
+update.mark(VERSION)
 run('?mode=status')
 labels = [item['label'] for item in ITEMS]
 print('   stato: %s' % labels)
-check(len(ITEMS) == 5,
-      'cinque righe: versione, canali, guida, servizio, rinnova')
+check(len(ITEMS) == 8,
+      'otto righe: versione, aggiornamento, canali, guida, servizio, rinnova')
 check(labels[0] == versione, 'la versione installata apre la pagina Stato')
-check(labels[1].startswith('Canali TV: 2 canali (3 flussi)') and
-      'copia di 2 h' in labels[1], 'riga dei canali con eta della copia')
-check(labels[2].startswith('Guida TV: 2 canali con guida') and
-      'copia di 5 min' in labels[2], 'riga della guida con eta della copia')
-check(labels[3].startswith('Ultimo rinnovo del servizio') and
-      'canali' in labels[3], 'riga dell ultimo rinnovo del servizio')
-check(labels[4] == 'Rinnova ora' and 'mode=status_refresh' in ITEMS[4]['url'],
+check(labels[1].startswith('Ultimo controllo: '),
+      'riga dell ultimo controllo: %s' % labels[1])
+check(labels[2] == 'Versione online: %s' % VERSION,
+      'versione vista sul repository: %s' % labels[2])
+check(labels[3] == 'Prossimo controllo: 30 min',
+      'quando riprova il controllo: %s' % labels[3])
+check(labels[4].startswith('Canali TV: 2 canali (3 flussi)') and
+      'copia di 2 h' in labels[4], 'riga dei canali con eta della copia')
+check(labels[5].startswith('Guida TV: 2 canali con guida') and
+      'copia di 5 min' in labels[5], 'riga della guida con eta della copia')
+check(labels[6].startswith('Ultimo rinnovo del servizio') and
+      'canali' in labels[6], 'riga dell ultimo rinnovo del servizio')
+check(labels[7] == 'Rinnova ora' and 'mode=status_refresh' in ITEMS[7]['url'],
       'pulsante Rinnova ora')
 
 chiamate = []
@@ -1819,7 +1826,7 @@ tv.guide = lambda url='', force=False: (chiamate.append(('guida', force)), {})[1
 run('?mode=status_refresh')
 check(chiamate == [('canali', True), ('guida', True)],
       'Rinnova ora forza canali e guida: %s' % chiamate)
-check(len(ITEMS) == 5 and ITEMS[1]['label'].startswith('Canali TV'),
+check(len(ITEMS) == 8 and ITEMS[4]['label'].startswith('Canali TV'),
       'e ridisegna la pagina Stato, senza passare da una pagina vuota')
 check(not any('Container.Update' in command for command in BUILTINS),
       'niente rimandi altrove: la pagina si costruisce qui: %s' % BUILTINS)
@@ -1846,9 +1853,9 @@ playlist_store.write_data(tv.GUIDE_CACHE, {'sources': [], 'fetched': 0,
 run('?mode=status')
 labels = [item['label'] for item in ITEMS]
 check(labels[0] == versione and
-      labels[1].startswith('Canali TV: nessuna copia') and
-      labels[2].startswith('Guida TV: nessuna copia'),
-      'senza copie la pagina lo dice: %s' % labels[:3])
+      labels[4].startswith('Canali TV: nessuna copia') and
+      labels[5].startswith('Guida TV: nessuna copia'),
+      'senza copie la pagina lo dice: %s' % labels[:6])
 
 run('')
 check(any(item['label'] == '[B]Stato[/B]' for item in ITEMS),
@@ -2541,5 +2548,77 @@ Dialog.NOTICES[:] = []
 run('?mode=self_update')
 check(ITEMS == [] and Dialog.NOTICES == [],
       'senza cartella scelta non si fa niente e non si rompe')
+
+print('39) controllo aggiornamenti: quando si ricontrolla il server')
+
+
+def segna(secondi_fa, vista, fatto=True):
+    playlist_store.write_data(update.FILE, {
+        'checked': int(update.time.time()) - secondi_fa, 'seen': vista,
+        'ok': fatto})
+
+
+check(not hasattr(update, 'installed'),
+      'la versione installata non si rilegge qui: la legge solo check_update')
+segna(0, VERSION)
+check(not update.due(), 'appena controllato: non si ricontrolla subito')
+segna(update.OK_AGE - 60, VERSION)
+check(not update.due(), 'prima della mezz ora niente rete')
+segna(update.OK_AGE + 1, VERSION)
+check(update.due(), 'dopo la mezz ora si ricontrolla')
+segna(update.RETRY + 1, '')
+check(not update.due(),
+      'vista vuota ma giro riuscito: vale la mezz ora, non i 15 minuti')
+
+# Rete muta o addons.xml illeggibile: si riprova dopo 15 minuti.
+segna(0, '', fatto=False)
+check(not update.due() and update.next_at() > update.time.time(),
+      'giro fallito: non si riprova subito')
+segna(update.RETRY - 60, '', fatto=False)
+check(not update.due(), 'giro fallito: nemmeno un minuto prima')
+segna(update.RETRY + 1, '', fatto=False)
+check(update.due(), 'giro fallito: si riprova dopo 15 minuti')
+giro = update.report()
+check(giro['ok'] is False and giro['next_text'] == 'adesso' and
+      giro['checked_text'] != 'mai',
+      'e lo stato dice che non e riuscito: %s' % giro)
+update.mark('', ok=False)
+check(playlist_store.read_data(update.FILE).get('ok') is False,
+      'mark(ok=False) resta scritto nel file del controllo')
+update.mark(VERSION)
+check(update.report()['ok'] is True and not update.due() and
+      update.report()['next_text'] == '30 min',
+      'un giro riuscito riporta alla mezz ora: %s' % update.report())
+
+# Il giro vero, con la rete che non risponde.
+fetch_originale = update.fetch
+update.fetch = lambda timeout=6: ''
+SETTINGS['update_check'] = 'true'
+playlist_store.write_data(update.FILE, {'checked': 0, 'seen': '', 'ok': True})
+run('')
+dati = playlist_store.read_data(update.FILE)
+check(dati.get('ok') is False and not update.due() and
+      update.report()['next_text'] == '15 min',
+      'rete muta: il menu annota il fallimento e riprova fra 15 minuti')
+update.fetch = fetch_originale
+SETTINGS['update_check'] = 'false'
+
+# La pagina Stato: le tre righe dell'aggiornamento automatico.
+segna(0, VERSION)
+run('?mode=status')
+etichette = [item['label'] for item in ITEMS]
+giro = update.report()
+check(any(e.startswith('Ultimo controllo:') for e in etichette) and
+      'Versione online: %s' % VERSION in etichette and
+      'Prossimo controllo: %s' % giro['next_text'] in etichette,
+      'la pagina Stato mostra ultimo controllo, versione vista e prossimo '
+      'controllo: %s' % [e for e in etichette if 'ontrollo' in e or 'online' in e])
+segna(update.RETRY + 1, '', fatto=False)
+run('?mode=status')
+etichette = [item['label'] for item in ITEMS]
+check('Versione online: non leggibile' in etichette and
+      'Prossimo controllo: adesso' in etichette,
+      'dopo un giro fallito la pagina Stato lo dice: %s' % etichette[:6])
+segna(update.OK_AGE + 1, VERSION)
 
 print('ESITO OK')

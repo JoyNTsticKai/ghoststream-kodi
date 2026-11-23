@@ -24,7 +24,7 @@
 </addon>
 <addon id="plugin.video.ghoststream"
        name="Ghost-Stream"
-       version="1.9.24"
+       version="1.9.25"
        provider-name="JoyNTsticK">
   <requires>
     <import addon="xbmc.python" version="3.0.0"/>

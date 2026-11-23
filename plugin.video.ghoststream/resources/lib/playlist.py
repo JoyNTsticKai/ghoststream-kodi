@@ -20,7 +20,7 @@ import unicodedata
 import urllib.parse
 import urllib.request
 
-USER_AGENT = 'plugin.video.ghoststream/1.9.24 (Kodi addon)'
+USER_AGENT = 'plugin.video.ghoststream/1.9.25 (Kodi addon)'
 
 PLAYLIST_EXTENSIONS = ('.m3u', '.m3u8')
 # Con l'estensione di un video non si legge nulla: si riproduce e basta.

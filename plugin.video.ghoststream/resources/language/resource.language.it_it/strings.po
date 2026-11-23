@@ -465,3 +465,27 @@ msgstr "Riavvio Kodi in corso: al termine parte la versione nuova."
 msgctxt "#30139"
 msgid "Reinstallare la stessa versione %s? Serve a forzare una copia nuova dei file."
 msgstr "Reinstallare la stessa versione %s? Serve a forzare una copia nuova dei file."
+
+msgctxt "#30140"
+msgid "Ultimo controllo"
+msgstr "Ultimo controllo"
+
+msgctxt "#30141"
+msgid "Versione online"
+msgstr "Versione online"
+
+msgctxt "#30142"
+msgid "Prossimo controllo"
+msgstr "Prossimo controllo"
+
+msgctxt "#30143"
+msgid "Aggiornamento automatico: quando l'addon ha guardato il repository GitHub, che versione ha trovato e quando riprova (ogni mezz ora se il giro e andato bene, dopo 15 minuti se la rete non ha risposto)."
+msgstr "Aggiornamento automatico: quando l'addon ha guardato il repository GitHub, che versione ha trovato e quando riprova (ogni mezz ora se il giro e andato bene, dopo 15 minuti se la rete non ha risposto)."
+
+msgctxt "#30144"
+msgid "non leggibile"
+msgstr "non leggibile"
+
+msgctxt "#30145"
+msgid "mai"
+msgstr "mai"
